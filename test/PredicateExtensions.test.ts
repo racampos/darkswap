@@ -9,7 +9,7 @@ import {
   buildTakerTraits,
   OrderStruct,
 } from "./helpers/orderUtils";
-import { ether } from "./helpers/utils";
+import { ether, joinStaticCalls } from "./helpers/utils";
 import { formatBalance } from "./helpers/testUtils";
 import { MockERC20, SimplePredicate } from "../typechain-types";
 
@@ -401,6 +401,165 @@ describe("Predicate Extensions", function () {
     console.log(`  - Gate value: ${currentGateValue}`);
     console.log(`  - Expected: ${expectedGateValue}`);
     console.log(`  - Predicate result: TRUE`);
+    console.log(`  - Order fill: SUCCESS`);
+    console.log(`  - WETH transferred: ${formatBalance(MAKING_AMOUNT, 18, 'WETH')}`);
+    console.log(`  - USDC transferred: ${formatBalance(TAKING_AMOUNT, 6, 'USDC')}`);
+  });
+
+  it("should handle complex predicates with multiple conditions (OR logic)", async function () {
+    // Test scenario: Order should execute if gate value is 150 OR 250
+    // We'll set gate value to 150 (first condition true, second condition false)
+    const currentGateValue = 150;
+    const condition1Value = 150; // This will be TRUE
+    const condition2Value = 250; // This will be FALSE
+    
+    await simplePredicate.setGateValue(currentGateValue);
+    console.log(`Gate value set to: ${currentGateValue}`);
+    console.log(`Predicate will check: (getGateValue() == ${condition1Value}) OR (getGateValue() == ${condition2Value})`);
+    console.log(`Expected result: (${currentGateValue} == ${condition1Value}) OR (${currentGateValue} == ${condition2Value}) = TRUE OR FALSE = TRUE`);
+
+    // Get network info for signing
+    const network = await ethers.provider.getNetwork();
+    const chainId = network.chainId;
+
+    // Build complex predicate with OR logic
+    // 1. Create first condition: getGateValue() == 150
+    const getGateValueCall1 = (aggregationRouter as any).interface.encodeFunctionData("arbitraryStaticCall", [
+      await simplePredicate.getAddress(),
+      simplePredicate.interface.encodeFunctionData("getGateValue"),
+    ]);
+    const condition1 = (aggregationRouter as any).interface.encodeFunctionData("eq", [
+      condition1Value,
+      getGateValueCall1,
+    ]);
+
+    // 2. Create second condition: getGateValue() == 250  
+    const getGateValueCall2 = (aggregationRouter as any).interface.encodeFunctionData("arbitraryStaticCall", [
+      await simplePredicate.getAddress(),
+      simplePredicate.interface.encodeFunctionData("getGateValue"),
+    ]);
+    const condition2 = (aggregationRouter as any).interface.encodeFunctionData("eq", [
+      condition2Value,
+      getGateValueCall2,
+    ]);
+
+    // 3. Combine conditions with OR logic using joinStaticCalls
+    const { offsets, data } = joinStaticCalls([condition1, condition2]);
+    const predicate = (aggregationRouter as any).interface.encodeFunctionData("or", [
+      offsets,
+      data,
+    ]);
+
+    console.log(`Complex predicate created (length: ${predicate.length} chars)`);
+    console.log(`  - Condition 1: getGateValue() == ${condition1Value}`);
+    console.log(`  - Condition 2: getGateValue() == ${condition2Value}`);
+    console.log(`  - Logic: OR (condition1 || condition2)`);
+
+    // Build order with complex predicate extension
+    const order: OrderStruct = buildOrder({
+      maker: maker.address,
+      makerAsset: WETH_ADDRESS,
+      takerAsset: USDC_ADDRESS,
+      makingAmount: MAKING_AMOUNT,
+      takingAmount: TAKING_AMOUNT,
+      makerTraits: buildMakerTraits({
+        allowPartialFill: true,
+        allowMultipleFills: true,
+      }),
+      salt: BigInt(Date.now() * 3000 + Math.floor(Math.random() * 1000)), // Unique salt
+    }, {
+      makerAssetSuffix: '0x',
+      takerAssetSuffix: '0x', 
+      makingAmountData: '0x',
+      takingAmountData: '0x',
+      predicate: predicate, // Add complex predicate to extensions
+      permit: '0x',
+      preInteraction: '0x',
+      postInteraction: '0x',
+    });
+
+    console.log("Order with complex predicate created:", {
+      salt: order.salt.toString(),
+      maker: order.maker,
+      makingAmount: formatBalance(order.makingAmount, 18, 'WETH'),
+      takingAmount: formatBalance(order.takingAmount, 6, 'USDC'),
+      predicateCondition: `(getGateValue() == ${condition1Value}) OR (getGateValue() == ${condition2Value})`,
+    });
+
+    // Sign the order
+    const signature = await signOrder(
+      order,
+      chainId,
+      AGGREGATION_ROUTER_V6,
+      maker
+    );
+
+    // Extract r and vs from signature
+    const sig = ethers.Signature.from(signature);
+    const r = sig.r;
+    const vs = sig.yParityAndS;
+
+    // Record balances before fill
+    const makerWethBefore = await wethContract.balanceOf(maker.address);
+    const makerUsdcBefore = await usdcContract.balanceOf(maker.address);
+    const takerWethBefore = await wethContract.balanceOf(taker.address);
+    const takerUsdcBefore = await usdcContract.balanceOf(taker.address);
+
+    console.log("Balances before fill:");
+    console.log(`Maker WETH: ${formatBalance(makerWethBefore, 18, 'WETH')}, USDC: ${formatBalance(makerUsdcBefore, 6, 'USDC')}`);
+    console.log(`Taker WETH: ${formatBalance(takerWethBefore, 18, 'WETH')}, USDC: ${formatBalance(takerUsdcBefore, 6, 'USDC')}`);
+
+    // Verify the predicate condition is met
+    const actualGateValue = await simplePredicate.getGateValue();
+    expect(actualGateValue).to.equal(currentGateValue);
+    console.log(`Complex predicate condition verified: ${actualGateValue} triggers OR logic`);
+    
+    // Use correct extension handling pattern
+    const extension = (order as any).extension || '0x';
+    const takerTraitsData = buildTakerTraits({
+      makingAmount: false, // Consistent with other tests
+      extension: extension,
+      target: taker.address,
+      interaction: '0x'
+    });
+    
+    console.log(`Extension length: ${extension.length} chars`);
+    console.log(`Taker traits: ${takerTraitsData.traits.toString()}`);
+    
+    // Fill the order - this should SUCCEED because OR condition is true
+    const fillTx = await (aggregationRouter.connect(taker) as any).fillOrderArgs(
+      order,
+      r,
+      vs,
+      TAKING_AMOUNT,
+      takerTraitsData.traits,
+      takerTraitsData.args // Extension packed into args
+    );
+
+    const receipt = await fillTx.wait();
+    console.log("Order filled successfully, gas used:", receipt.gasUsed);
+
+    // Record balances after fill
+    const makerWethAfter = await wethContract.balanceOf(maker.address);
+    const makerUsdcAfter = await usdcContract.balanceOf(maker.address);
+    const takerWethAfter = await wethContract.balanceOf(taker.address);
+    const takerUsdcAfter = await usdcContract.balanceOf(taker.address);
+
+    console.log("Balances after fill:");
+    console.log(`Maker WETH: ${formatBalance(makerWethAfter, 18, 'WETH')}, USDC: ${formatBalance(makerUsdcAfter, 6, 'USDC')}`);
+    console.log(`Taker WETH: ${formatBalance(takerWethAfter, 18, 'WETH')}, USDC: ${formatBalance(takerUsdcAfter, 6, 'USDC')}`);
+
+    // Verify the trade occurred correctly
+    expect(makerWethAfter).to.equal(makerWethBefore - MAKING_AMOUNT);
+    expect(makerUsdcAfter).to.equal(makerUsdcBefore + TAKING_AMOUNT);
+    expect(takerWethAfter).to.equal(takerWethBefore + MAKING_AMOUNT);
+    expect(takerUsdcAfter).to.equal(takerUsdcBefore - TAKING_AMOUNT);
+
+    console.log("Order successfully filled with complex OR predicate:");
+    console.log(`  - Gate value: ${currentGateValue}`);
+    console.log(`  - Condition 1: ${currentGateValue} == ${condition1Value} = TRUE`);
+    console.log(`  - Condition 2: ${currentGateValue} == ${condition2Value} = FALSE`);
+    console.log(`  - OR result: TRUE OR FALSE = TRUE`);
     console.log(`  - Order fill: SUCCESS`);
     console.log(`  - WETH transferred: ${formatBalance(MAKING_AMOUNT, 18, 'WETH')}`);
     console.log(`  - USDC transferred: ${formatBalance(TAKING_AMOUNT, 6, 'USDC')}`);
