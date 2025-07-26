@@ -6,27 +6,17 @@ import {
   buildOrder,
   signOrder,
   buildMakerTraits,
+  buildTakerTraits,
   OrderStruct,
 } from "./helpers/orderUtils";
 import { ether } from "./helpers/utils";
+import { formatBalance } from "./helpers/testUtils";
 import { MockERC20, SimplePredicate } from "../typechain-types";
 
 // Import the ABI
 import AggregationRouterV6ABI from "../abi/AggregationRouterV6.json";
 
-// Helper function to format balances in human-readable format
-function formatBalance(amount: bigint, decimals: number, symbol: string): string {
-  const divisor = BigInt(10 ** decimals);
-  const wholePart = amount / divisor;
-  const fractionalPart = amount % divisor;
-  
-  if (fractionalPart === 0n) {
-    return `${wholePart.toString()} ${symbol}`;
-  } else {
-    const fractionalStr = fractionalPart.toString().padStart(decimals, '0');
-    return `${wholePart.toString()}.${fractionalStr} ${symbol}`;
-  }
-}
+
 
 describe("Predicate Extensions", function () {
   // Contract addresses
@@ -180,9 +170,16 @@ describe("Predicate Extensions", function () {
         allowPartialFill: true,
         allowMultipleFills: true,
       }),
-      salt: BigInt(Date.now()),
+      salt: BigInt(Date.now() * 1000 + Math.floor(Math.random() * 1000)), // Unique salt
     }, {
+      makerAssetSuffix: '0x',
+      takerAssetSuffix: '0x', 
+      makingAmountData: '0x',
+      takingAmountData: '0x',
       predicate: predicate, // Add predicate to extensions
+      permit: '0x',
+      preInteraction: '0x',
+      postInteraction: '0x',
     });
 
     console.log("Order with predicate created:", {
@@ -216,6 +213,15 @@ describe("Predicate Extensions", function () {
     console.log(`Maker WETH: ${formatBalance(makerWethBefore, 18, 'WETH')}, USDC: ${formatBalance(makerUsdcBefore, 6, 'USDC')}`);
     console.log(`Taker WETH: ${formatBalance(takerWethBefore, 18, 'WETH')}, USDC: ${formatBalance(takerUsdcBefore, 6, 'USDC')}`);
 
+    // Use correct extension handling pattern (pack extension into taker traits args)
+    const extension = (order as any).extension || '0x';
+    const takerTraitsData = buildTakerTraits({
+      makingAmount: false, // Consistent with GeneralFunctionality tests
+      extension: extension,
+      target: taker.address,
+      interaction: '0x'
+    });
+
     // Attempt to fill the order - this should FAIL with PredicateIsNotTrue
     let actualError = "";
     try {
@@ -224,17 +230,17 @@ describe("Predicate Extensions", function () {
         r,
         vs,
         TAKING_AMOUNT,
-        0, // Default taker traits
-        order.extension // Pass the extension containing the predicate
+        takerTraitsData.traits,
+        takerTraitsData.args // Extension packed into args
       );
       throw new Error("Transaction should have failed but didn't");
     } catch (error: any) {
       actualError = error.message;
       console.log("Actual error caught:", actualError);
       
-      // Check for PredicateIsNotTrue error selector (0xb2d25e49)
-      expect(error.message).to.include("0xb2d25e49");
-      console.log("Confirmed: PredicateIsNotTrue error (selector: 0xb2d25e49)");
+      // Check for PredicateIsNotTrue error (0xb6629c02)
+      expect(error.message).to.include("0xb6629c02");
+      console.log("Confirmed: PredicateIsNotTrue error (selector: 0xb6629c02)");
     }
 
     // Verify balances remain unchanged (no trade occurred)
@@ -254,6 +260,150 @@ describe("Predicate Extensions", function () {
     console.log(`  - Predicate result: FALSE`);
     console.log(`  - Order fill: REJECTED`);
     console.log(`  - Balances: UNCHANGED`);
+  });
+
+  it("should allow order fill when predicate condition is true", async function () {
+    // Set gate value to 200 (this will make our predicate true)
+    const currentGateValue = 200;
+    const expectedGateValue = 200; // Our predicate will check for this value
+    
+    await simplePredicate.setGateValue(currentGateValue);
+    console.log(`Gate value set to: ${currentGateValue}`);
+    console.log(`Predicate will check for: ${expectedGateValue}`);
+    console.log(`Expected result: Predicate should be TRUE`);
+
+    // Get network info for signing
+    const network = await ethers.provider.getNetwork();
+    const chainId = network.chainId;
+
+    // Build predicate calldata using AggregationRouterV6's eq() function
+    // 1. Create calldata to call simplePredicate.getGateValue()
+    const getGateValueCall = (aggregationRouter as any).interface.encodeFunctionData("arbitraryStaticCall", [
+      await simplePredicate.getAddress(),
+      simplePredicate.interface.encodeFunctionData("getGateValue"),
+    ]);
+
+    // 2. Create predicate: getGateValue() == 200
+    const predicate = (aggregationRouter as any).interface.encodeFunctionData("eq", [
+      expectedGateValue,
+      getGateValueCall,
+    ]);
+
+    console.log(`Predicate calldata created (length: ${predicate.length} chars)`);
+
+    // Build order with predicate extension
+    // Note: The HAS_EXTENSION flag will be automatically set to true by buildOrder()
+    // when it detects that extension data (predicate) is provided
+    const order: OrderStruct = buildOrder({
+      maker: maker.address,
+      makerAsset: WETH_ADDRESS,
+      takerAsset: USDC_ADDRESS,
+      makingAmount: MAKING_AMOUNT,
+      takingAmount: TAKING_AMOUNT,
+      makerTraits: buildMakerTraits({
+        allowPartialFill: true,
+        allowMultipleFills: true,
+      }),
+      salt: BigInt(Date.now() * 2000 + Math.floor(Math.random() * 1000)), // Unique salt
+    }, {
+      makerAssetSuffix: '0x',
+      takerAssetSuffix: '0x', 
+      makingAmountData: '0x',
+      takingAmountData: '0x',
+      predicate: predicate, // Add predicate to extensions
+      permit: '0x',
+      preInteraction: '0x',
+      postInteraction: '0x',
+    });
+
+    console.log("Order with predicate created:", {
+      salt: order.salt.toString(),
+      maker: order.maker,
+      makingAmount: formatBalance(order.makingAmount, 18, 'WETH'),
+      takingAmount: formatBalance(order.takingAmount, 6, 'USDC'),
+      predicateCondition: `getGateValue() == ${expectedGateValue}`,
+    });
+
+    // Sign the order
+    const signature = await signOrder(
+      order,
+      chainId,
+      AGGREGATION_ROUTER_V6,
+      maker
+    );
+
+    // Extract r and vs from signature
+    const sig = ethers.Signature.from(signature);
+    const r = sig.r;
+    const vs = sig.yParityAndS;
+
+    // Record balances before fill
+    const makerWethBefore = await wethContract.balanceOf(maker.address);
+    const makerUsdcBefore = await usdcContract.balanceOf(maker.address);
+    const takerWethBefore = await wethContract.balanceOf(taker.address);
+    const takerUsdcBefore = await usdcContract.balanceOf(taker.address);
+
+    console.log("Balances before fill:");
+    console.log(`Maker WETH: ${formatBalance(makerWethBefore, 18, 'WETH')}, USDC: ${formatBalance(makerUsdcBefore, 6, 'USDC')}`);
+    console.log(`Taker WETH: ${formatBalance(takerWethBefore, 18, 'WETH')}, USDC: ${formatBalance(takerUsdcBefore, 6, 'USDC')}`);
+
+    // Verify the predicate condition is met
+    const actualGateValue = await simplePredicate.getGateValue();
+    expect(actualGateValue).to.equal(expectedGateValue);
+    console.log(`Predicate condition verified: ${actualGateValue} == ${expectedGateValue}`);
+    
+    // Use correct extension handling pattern (pack extension into taker traits args)
+    const extension = (order as any).extension || '0x';
+    const takerTraitsData = buildTakerTraits({
+      makingAmount: false, // Consistent with GeneralFunctionality tests
+      extension: extension,
+      target: taker.address,
+      interaction: '0x'
+    });
+    
+    console.log(`Extension length: ${extension.length} chars`);
+    console.log(`Taker traits: ${takerTraitsData.traits.toString()}`);
+    
+    // Fill the order - this should SUCCEED because predicate is true
+    const fillTx = await (aggregationRouter.connect(taker) as any).fillOrderArgs(
+      order,
+      r,
+      vs,
+      TAKING_AMOUNT,
+      takerTraitsData.traits,
+      takerTraitsData.args // Extension packed into args
+    );
+
+    const receipt = await fillTx.wait();
+    console.log("Order filled successfully, gas used:", receipt.gasUsed);
+
+    // Record balances after fill
+    const makerWethAfter = await wethContract.balanceOf(maker.address);
+    const makerUsdcAfter = await usdcContract.balanceOf(maker.address);
+    const takerWethAfter = await wethContract.balanceOf(taker.address);
+    const takerUsdcAfter = await usdcContract.balanceOf(taker.address);
+
+    console.log("Balances after fill:");
+    console.log(`Maker WETH: ${formatBalance(makerWethAfter, 18, 'WETH')}, USDC: ${formatBalance(makerUsdcAfter, 6, 'USDC')}`);
+    console.log(`Taker WETH: ${formatBalance(takerWethAfter, 18, 'WETH')}, USDC: ${formatBalance(takerUsdcAfter, 6, 'USDC')}`);
+
+    // Verify the trade occurred correctly
+    
+    // Maker should have lost WETH and gained USDC
+    expect(makerWethAfter).to.equal(makerWethBefore - MAKING_AMOUNT);
+    expect(makerUsdcAfter).to.equal(makerUsdcBefore + TAKING_AMOUNT);
+    
+    // Taker should have gained WETH and lost USDC
+    expect(takerWethAfter).to.equal(takerWethBefore + MAKING_AMOUNT);
+    expect(takerUsdcAfter).to.equal(takerUsdcBefore - TAKING_AMOUNT);
+
+    console.log("Order successfully filled with predicate:");
+    console.log(`  - Gate value: ${currentGateValue}`);
+    console.log(`  - Expected: ${expectedGateValue}`);
+    console.log(`  - Predicate result: TRUE`);
+    console.log(`  - Order fill: SUCCESS`);
+    console.log(`  - WETH transferred: ${formatBalance(MAKING_AMOUNT, 18, 'WETH')}`);
+    console.log(`  - USDC transferred: ${formatBalance(TAKING_AMOUNT, 6, 'USDC')}`);
   });
 
   after(async function () {

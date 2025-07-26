@@ -9,24 +9,13 @@ import {
   OrderStruct,
 } from "./helpers/orderUtils";
 import { ether } from "./helpers/utils";
+import { formatBalance } from "./helpers/testUtils";
 import { MockERC20 } from "../typechain-types";
 
 // Import the ABI
 import AggregationRouterV6ABI from "../abi/AggregationRouterV6.json";
 
-// Helper function to format balances in human-readable format
-function formatBalance(amount: bigint, decimals: number, symbol: string): string {
-  const divisor = BigInt(10 ** decimals);
-  const wholePart = amount / divisor;
-  const fractionalPart = amount % divisor;
-  
-  if (fractionalPart === 0n) {
-    return `${wholePart.toString()} ${symbol}`;
-  } else {
-    const fractionalStr = fractionalPart.toString().padStart(decimals, '0');
-    return `${wholePart.toString()}.${fractionalStr} ${symbol}`;
-  }
-}
+
 
 describe("General Functionality", function () {
   // Contract addresses
