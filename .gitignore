@@ -15,3 +15,20 @@ node_modules
 
 # Hardhat Ignition default folder for deployments
 ignition/deployments/
+
+# ZK Circuit artifacts
+circuits/*.r1cs
+circuits/*.wasm
+circuits/*.ptau
+circuits/*.zkey
+circuits/*.json
+circuits/proof.json
+circuits/public.json
+circuits/witness.wtns
+circuits/input.json
+circuits/js/
+
+# ZK Build directories  
+circuits/artifacts/
+circuits/keys/
+circuits/powersoftau/
