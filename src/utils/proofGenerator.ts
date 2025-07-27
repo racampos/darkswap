@@ -3,98 +3,65 @@
  * Generates proofs using circuit artifacts (WASM + ZKey)
  */
 
-import * as snarkjs from "snarkjs";
+import * as snarkjs from 'snarkjs';
+const { poseidon3 } = require("poseidon-lite");
 import { ethers } from "ethers";
-import { 
-  ZKProofInputs, 
-  ZKProof, 
-  PublicSignals, 
-  ZKProofData, 
-  FormattedProof,
-  ValidationResult,
-  ProofConfig,
-  CIRCUIT_CONSTANTS 
-} from "../types/zkTypes";
 import path from "path";
+import { 
+    ZKProofInputs, 
+    ZKProof, 
+    PublicSignals, 
+    ZKProofData, 
+    FormattedProof, 
+    ValidationResult, 
+    ProofConfig,
+    CIRCUIT_CONSTANTS 
+  } from "../types/zkTypes";
 
 // Default paths for circuit artifacts
 const DEFAULT_WASM_PATH = path.join(__dirname, "../../circuits/hidden_params_js/hidden_params.wasm");
 const DEFAULT_ZKEY_PATH = path.join(__dirname, "../../circuits/hidden_params_0001.zkey");
 
 /**
- * Validates ZK proof inputs
+ * Validates ZK proof inputs for constraint satisfaction
  */
 export function validateInputs(inputs: ZKProofInputs): ValidationResult {
-  const errors: string[] = [];
-  
-  // Validate all inputs are provided
-  const requiredFields: (keyof ZKProofInputs)[] = [
-    'secretPrice', 'secretAmount', 'commit', 'nonce', 'offeredPrice', 'offeredAmount'
-  ];
-  
-  for (const field of requiredFields) {
-    if (!inputs[field] || inputs[field].toString().trim() === '') {
-      errors.push(`${field} is required and cannot be empty`);
-    }
-  }
-  
-  // Validate numeric inputs are valid
-  const numericFields: (keyof ZKProofInputs)[] = [
-    'secretPrice', 'secretAmount', 'nonce', 'offeredPrice', 'offeredAmount'
-  ];
-  
-  for (const field of numericFields) {
-    try {
-      const value = BigInt(inputs[field]);
-      if (value < 0n) {
-        errors.push(`${field} must be non-negative`);
-      }
-      // Check field size constraint
-      if (value >= BigInt(CIRCUIT_CONSTANTS.FIELD_SIZE)) {
-        errors.push(`${field} exceeds field size limit`);
-      }
-    } catch (e) {
-      errors.push(`${field} must be a valid number or numeric string`);
-    }
-  }
-  
-  // Validate commitment constraint
   try {
-    const commit = BigInt(inputs.commit);
     const secretPrice = BigInt(inputs.secretPrice);
     const secretAmount = BigInt(inputs.secretAmount);
     const nonce = BigInt(inputs.nonce);
-    const expectedCommit = secretPrice + secretAmount + nonce;
-    
-    if (commit !== expectedCommit) {
-      errors.push(`Commitment mismatch: expected ${expectedCommit.toString()}, got ${commit.toString()}`);
-    }
-  } catch (e) {
-    errors.push('Failed to validate commitment constraint');
-  }
-  
-  // Validate inequality constraints
-  try {
     const offeredPrice = BigInt(inputs.offeredPrice);
-    const secretPrice = BigInt(inputs.secretPrice);
     const offeredAmount = BigInt(inputs.offeredAmount);
-    const secretAmount = BigInt(inputs.secretAmount);
-    
+    const commit = BigInt(inputs.commit);
+
+    const errors: string[] = [];
+
+    // Validate Poseidon commitment
+    const expectedCommit = poseidon3([secretPrice, secretAmount, nonce]);
+    if (commit !== expectedCommit) {
+      errors.push(`Commitment mismatch: expected ${expectedCommit}, got ${commit}`);
+    }
+
+    // Validate price constraint
     if (offeredPrice < secretPrice) {
-      errors.push(`Offered price (${offeredPrice}) must be >= secret price (${secretPrice})`);
+      errors.push(`Price constraint violated: ${offeredPrice} < ${secretPrice}`);
     }
-    
+
+    // Validate amount constraint
     if (offeredAmount < secretAmount) {
-      errors.push(`Offered amount (${offeredAmount}) must be >= secret amount (${secretAmount})`);
+      errors.push(`Amount constraint violated: ${offeredAmount} < ${secretAmount}`);
     }
-  } catch (e) {
-    errors.push('Failed to validate inequality constraints');
+
+    return { 
+      isValid: errors.length === 0,
+      errors
+    };
+  } catch (error) {
+    return {
+      isValid: false,
+      errors: [`Input validation error: ${error instanceof Error ? error.message : 'Unknown error'}`]
+    };
   }
-  
-  return {
-    isValid: errors.length === 0,
-    errors
-  };
 }
 
 /**
@@ -122,7 +89,7 @@ export async function generateProof(
   };
   
   if (config.enableLogging) {
-    console.log('🔄 Generating ZK proof with inputs:', {
+    console.log('Generating ZK proof with inputs:', {
       commit: inputs.commit,
       nonce: inputs.nonce,
       offeredPrice: inputs.offeredPrice,
@@ -140,8 +107,8 @@ export async function generateProof(
     );
     
     if (config.enableLogging) {
-      console.log('✅ ZK proof generated successfully');
-      console.log('📊 Public signals:', publicSignals);
+      console.log('ZK proof generated successfully');
+      console.log('Public signals:', publicSignals);
     }
     
     // Validate proof has correct structure
@@ -161,7 +128,7 @@ export async function generateProof(
   } catch (error: any) {
     const errorMsg = `Failed to generate ZK proof: ${error.message}`;
     if (config.enableLogging) {
-      console.error('❌', errorMsg);
+      console.error('Error', errorMsg);
     }
     throw new Error(errorMsg);
   }

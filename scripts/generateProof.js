@@ -3,24 +3,10 @@
  * Tests proof generation directly with snarkjs and circuit artifacts
  */
 
-const snarkjs = require("snarkjs");
-const fs = require("fs");
-const path = require("path");
-
-// Sample test data for proof generation
-const SAMPLE_INPUTS = {
-  // Private inputs (maker's secret thresholds)
-  secretPrice: "2000",      // Maker wants at least 2000 USDC per WETH
-  secretAmount: "10",       // Maker wants to sell at least 10 WETH
-  
-  // Public inputs
-  nonce: "123456789",       // Random nonce for commitment uniqueness
-  offeredPrice: "2100",     // Taker offers 2100 USDC per WETH (satisfies constraint)
-  offeredAmount: "50",      // Taker wants 50 WETH (satisfies constraint)
-  
-  // Commitment (secretPrice + secretAmount + nonce)
-  commit: (BigInt("2000") + BigInt("10") + BigInt("123456789")).toString()
-};
+const snarkjs = require('snarkjs');
+const fs = require('fs');
+const path = require('path');
+const { poseidon3 } = require('poseidon-lite');
 
 // File paths
 const CIRCUITS_DIR = path.join(__dirname, "../circuits");
@@ -29,8 +15,35 @@ const ZKEY_PATH = path.join(CIRCUITS_DIR, "hidden_params_0001.zkey");
 const PROOF_PATH = path.join(CIRCUITS_DIR, "proof.json");
 const PUBLIC_PATH = path.join(CIRCUITS_DIR, "public.json");
 
+// Sample test data with Poseidon commitment
+const SECRET_PRICE = BigInt('2000');
+const SECRET_AMOUNT = BigInt('10');
+const NONCE = BigInt('123456789');
+
+// Generate Poseidon commitment using poseidon3 for 3 inputs
+const COMMITMENT = poseidon3([SECRET_PRICE, SECRET_AMOUNT, NONCE]);
+
+const SAMPLE_INPUTS = {
+  secretPrice: SECRET_PRICE.toString(),
+  secretAmount: SECRET_AMOUNT.toString(),
+  nonce: NONCE.toString(),
+  offeredPrice: '2100',
+  offeredAmount: '50',
+  commit: COMMITMENT.toString()
+};
+
+// Invalid test data - price constraint violation
+const INVALID_INPUTS = {
+  secretPrice: SECRET_PRICE.toString(),
+  secretAmount: SECRET_AMOUNT.toString(),
+  nonce: NONCE.toString(),
+  offeredPrice: '1500',    // 1500 < 2000
+  offeredAmount: '50',
+  commit: COMMITMENT.toString() // Same commitment
+};
+
 function validateInputs(inputs) {
-  console.log('🔍 Validating inputs...');
+  console.log('Validating inputs...');
   
   const errors = [];
   
@@ -43,7 +56,7 @@ function validateInputs(inputs) {
   }
   
   if (errors.length > 0) {
-    console.log('❌ Validation failed:', errors);
+    console.log('Validation failed:', errors);
     return false;
   }
   
@@ -52,10 +65,10 @@ function validateInputs(inputs) {
   const secretAmount = BigInt(inputs.secretAmount);
   const nonce = BigInt(inputs.nonce);
   const commit = BigInt(inputs.commit);
-  const expectedCommit = secretPrice + secretAmount + nonce;
+  const expectedCommit = poseidon3([secretPrice, secretAmount, nonce]);
   
   if (commit !== expectedCommit) {
-    console.log(`❌ Commitment mismatch: expected ${expectedCommit}, got ${commit}`);
+    console.log(`Commitment mismatch: expected ${expectedCommit}, got ${commit}`);
     return false;
   }
   
@@ -64,21 +77,21 @@ function validateInputs(inputs) {
   const offeredAmount = BigInt(inputs.offeredAmount);
   
   if (offeredPrice < secretPrice) {
-    console.log(`❌ Price constraint violated: ${offeredPrice} < ${secretPrice}`);
+    console.log(`Price constraint violated: ${offeredPrice} < ${secretPrice}`);
     return false;
   }
   
   if (offeredAmount < secretAmount) {
-    console.log(`❌ Amount constraint violated: ${offeredAmount} < ${secretAmount}`);
+    console.log(`Amount constraint violated: ${offeredAmount} < ${secretAmount}`);
     return false;
   }
   
-  console.log('✅ All inputs are valid!');
+  console.log('All inputs are valid!');
   return true;
 }
 
 function checkFiles() {
-  console.log('\n📁 Checking required files...');
+  console.log('\nChecking required files...');
   
   const files = [
     { path: WASM_PATH, name: 'Circuit WASM' },
@@ -88,9 +101,9 @@ function checkFiles() {
   for (const file of files) {
     if (fs.existsSync(file.path)) {
       const stats = fs.statSync(file.path);
-      console.log(`   ✅ ${file.name}: ${file.path} (${(stats.size / 1024).toFixed(1)}KB)`);
+      console.log(`   ${file.name}: ${file.path} (${(stats.size / 1024).toFixed(1)}KB)`);
     } else {
-      console.log(`   ❌ ${file.name}: ${file.path} - NOT FOUND`);
+      console.log(`   ${file.name}: ${file.path} - NOT FOUND`);
       return false;
     }
   }
@@ -99,10 +112,10 @@ function checkFiles() {
 }
 
 async function generateProof() {
-  console.log('\n🔄 Generating ZK proof...');
+  console.log('\nGenerating ZK proof...');
   
   try {
-    console.log('   📊 Input data:');
+    console.log('   Input data:');
     console.log('      Commit:', SAMPLE_INPUTS.commit);
     console.log('      Nonce:', SAMPLE_INPUTS.nonce);
     console.log('      Offered Price:', SAMPLE_INPUTS.offeredPrice);
@@ -116,17 +129,17 @@ async function generateProof() {
       ZKEY_PATH
     );
     
-    console.log('\n✅ Proof generated successfully!');
+    console.log('\nProof generated successfully!');
     
     // Display proof structure
-    console.log('\n📊 Proof Data:');
+    console.log('\nProof Data:');
     console.log('   A:', proof.pi_a);
     console.log('   B:', proof.pi_b);
     console.log('   C:', proof.pi_c);
     console.log('   Protocol:', proof.protocol);
     console.log('   Curve:', proof.curve);
     
-    console.log('\n📈 Public Signals:');
+    console.log('\nPublic Signals:');
     console.log('   [0] Valid:', publicSignals[0]);
     console.log('   [1] Commit:', publicSignals[1]);
     console.log('   [2] Nonce:', publicSignals[2]);
@@ -137,50 +150,44 @@ async function generateProof() {
     fs.writeFileSync(PROOF_PATH, JSON.stringify(proof, null, 2));
     fs.writeFileSync(PUBLIC_PATH, JSON.stringify(publicSignals, null, 2));
     
-    console.log('\n💾 Proof files saved:');
-    console.log('   📁 Proof:', PROOF_PATH);
-    console.log('   📁 Public signals:', PUBLIC_PATH);
+    console.log('\nProof files saved:');
+    console.log('   Proof:', PROOF_PATH);
+    console.log('   Public signals:', PUBLIC_PATH);
     
     return { proof, publicSignals };
     
   } catch (error) {
-    console.error('\n❌ Proof generation failed:', error.message);
+    console.error('\nProof generation failed:', error.message);
     throw error;
   }
 }
 
 function testInvalidInputs() {
-  console.log('\n❌ Testing invalid inputs...');
+  console.log('\nTesting invalid inputs...');
   
   // Test price constraint violation
-  const invalidInputs = {
-    ...SAMPLE_INPUTS,
-    offeredPrice: "1500" // Below secret price of 2000
-  };
-  
-  console.log('   Testing price constraint violation (offered: 1500, secret: 2000):');
-  const isValid = validateInputs(invalidInputs);
+  const isValid = validateInputs(INVALID_INPUTS);
   if (!isValid) {
-    console.log('   ✅ Correctly rejected invalid inputs');
+    console.log('   Correctly rejected invalid inputs');
   } else {
-    console.log('   ❌ Should have rejected invalid inputs!');
+    console.log('   Should have rejected invalid inputs!');
   }
 }
 
 async function main() {
-  console.log('🚀 ZK Proof Generation Test');
+  console.log('ZK Proof Generation Test');
   console.log('================================');
   
   try {
     // Check required files exist
     if (!checkFiles()) {
-      console.error('\n💥 Required files missing. Run: npm run circuit:setup');
+      console.error('\nRequired files missing. Run: npm run circuit:setup');
       process.exit(1);
     }
     
     // Test input validation
     if (!validateInputs(SAMPLE_INPUTS)) {
-      console.error('\n💥 Input validation failed');
+      console.error('\nInput validation failed');
       process.exit(1);
     }
     
@@ -190,17 +197,17 @@ async function main() {
     // Generate proof
     const result = await generateProof();
     
-    console.log('\n🎉 All tests completed successfully!');
-    console.log('\n📋 Summary:');
-    console.log('   ✅ Required files found');
-    console.log('   ✅ Input validation working');
-    console.log('   ✅ Invalid input detection working');
-    console.log('   ✅ Proof generation successful');
-    console.log('   ✅ Proof files saved');
-    console.log('\n🔄 Next: Run `npm run circuit:verify` to verify the generated proof');
+    console.log('\nAll tests completed successfully!');
+    console.log('\nSummary:');
+    console.log('   Required files found');
+    console.log('   Input validation working');
+    console.log('   Invalid input detection working');
+    console.log('   Proof generation successful');
+    console.log('   Proof files saved');
+    console.log('\nNext: Run `npm run circuit:verify` to verify the generated proof');
     
   } catch (error) {
-    console.error('\n💥 Test failed:', error.message);
+    console.error('\nTest failed:', error.message);
     process.exit(1);
   }
 }

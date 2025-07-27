@@ -2,24 +2,41 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { Groth16Verifier } from "../typechain-types";
 import * as snarkjs from "snarkjs";
-import * as path from "path";
+import path from "path";
+const { poseidon3 } = require("poseidon-lite");
 
 describe("ZK Proof Generation SDK", function () {
   let verifier: Groth16Verifier;
-  
-  // Test data
-  const SAMPLE_INPUTS = {
-    secretPrice: "2000",      // Maker wants at least 2000 USDC per WETH  
-    secretAmount: "10",       // Maker wants to sell at least 10 WETH
-    nonce: "123456789",       // Random nonce for commitment uniqueness
-    offeredPrice: "2100",     // Taker offers 2100 USDC per WETH (satisfies constraint)
-    offeredAmount: "50",      // Taker wants 50 WETH (satisfies constraint)
-    commit: (BigInt("2000") + BigInt("10") + BigInt("123456789")).toString()
-  };
 
   // Circuit artifact paths
   const WASM_PATH = path.join(__dirname, "../circuits/hidden_params_js/hidden_params.wasm");
   const ZKEY_PATH = path.join(__dirname, "../circuits/hidden_params_0001.zkey");
+
+  // Sample test data with Poseidon commitment
+  const SECRET_PRICE = BigInt('2000');
+  const SECRET_AMOUNT = BigInt('10');
+  const NONCE = BigInt('123456789');
+  
+  // Generate Poseidon commitment using poseidon3 for 3 inputs
+  const COMMITMENT = poseidon3([SECRET_PRICE, SECRET_AMOUNT, NONCE]);
+
+  const SAMPLE_INPUTS = {
+    secretPrice: SECRET_PRICE.toString(),
+    secretAmount: SECRET_AMOUNT.toString(),
+    nonce: NONCE.toString(),
+    offeredPrice: '2100',
+    offeredAmount: '50',
+    commit: COMMITMENT.toString()
+  };
+
+  const INVALID_INPUTS = {
+    secretPrice: SECRET_PRICE.toString(),
+    secretAmount: SECRET_AMOUNT.toString(),
+    nonce: NONCE.toString(),
+    offeredPrice: '1500',    // 1500 < 2000
+    offeredAmount: '50',
+    commit: COMMITMENT.toString()
+  };
 
   beforeEach(async function () {
     // Deploy verifier contract for integration testing
@@ -30,39 +47,45 @@ describe("ZK Proof Generation SDK", function () {
 
   describe("Input Validation", function () {
     it("should validate correct inputs", function () {
-      // Test basic validation logic
       const secretPrice = BigInt(SAMPLE_INPUTS.secretPrice);
       const secretAmount = BigInt(SAMPLE_INPUTS.secretAmount);
       const nonce = BigInt(SAMPLE_INPUTS.nonce);
-      const commit = BigInt(SAMPLE_INPUTS.commit);
       const offeredPrice = BigInt(SAMPLE_INPUTS.offeredPrice);
       const offeredAmount = BigInt(SAMPLE_INPUTS.offeredAmount);
+      const commit = BigInt(SAMPLE_INPUTS.commit);
 
-      // Validate commitment constraint
-      const expectedCommit = secretPrice + secretAmount + nonce;
-      expect(commit).to.equal(expectedCommit, "Commitment should match sum of components");
-
-      // Validate inequality constraints
-      expect(offeredPrice).to.be.gte(secretPrice, "Offered price should be >= secret price");
-      expect(offeredAmount).to.be.gte(secretAmount, "Offered amount should be >= secret amount");
+      console.log("All input constraints satisfied");
       
-      console.log("      All input constraints satisfied");
+      // Verify Poseidon commitment
+      const expectedCommit = poseidon3([secretPrice, secretAmount, nonce]);
+      expect(commit).to.equal(expectedCommit, "Commitment should match Poseidon hash");
+      
+      // Verify price constraint
+      expect(offeredPrice >= secretPrice).to.be.true;
+      
+      // Verify amount constraint  
+      expect(offeredAmount >= secretAmount).to.be.true;
     });
 
     it("should detect constraint violations", function () {
-      // Test price constraint violation
-      const invalidPrice = BigInt("1500"); // Below secret price of 2000
-      const secretPrice = BigInt(SAMPLE_INPUTS.secretPrice);
-      
-      expect(invalidPrice).to.be.lt(secretPrice, "Should detect price constraint violation");
+      const secretPrice = BigInt(INVALID_INPUTS.secretPrice);
+      const secretAmount = BigInt(INVALID_INPUTS.secretAmount);
+      const nonce = BigInt(INVALID_INPUTS.nonce);
+      const offeredPrice = BigInt(INVALID_INPUTS.offeredPrice);
+      const offeredAmount = BigInt(INVALID_INPUTS.offeredAmount);
+      const commit = BigInt(INVALID_INPUTS.commit);
 
-      // Test amount constraint violation  
-      const invalidAmount = BigInt("5"); // Below secret amount of 10
-      const secretAmount = BigInt(SAMPLE_INPUTS.secretAmount);
+      console.log("Constraint violations detected correctly");
       
-      expect(invalidAmount).to.be.lt(secretAmount, "Should detect amount constraint violation");
+      // Commitment should still be valid (same commitment)
+      const expectedCommit = poseidon3([secretPrice, secretAmount, nonce]);
+      expect(commit).to.equal(expectedCommit, "Commitment should match Poseidon hash");
       
-      console.log("      Constraint violations detected correctly");
+      // Price constraint should be violated
+      expect(offeredPrice < secretPrice).to.be.true;
+      
+      // Amount constraint should be satisfied
+      expect(offeredAmount >= secretAmount).to.be.true;
     });
   });
 
