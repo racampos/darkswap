@@ -15,6 +15,11 @@ import {
   ProofConfig,
   CIRCUIT_CONSTANTS 
 } from "../types/zkTypes";
+import path from "path";
+
+// Default paths for circuit artifacts
+const DEFAULT_WASM_PATH = path.join(__dirname, "../../circuits/hidden_params_js/hidden_params.wasm");
+const DEFAULT_ZKEY_PATH = path.join(__dirname, "../../circuits/hidden_params_0001.zkey");
 
 /**
  * Validates ZK proof inputs

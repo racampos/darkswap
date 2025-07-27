@@ -18,7 +18,7 @@ describe("ZK Proof Generation SDK", function () {
   };
 
   // Circuit artifact paths
-  const WASM_PATH = path.join(__dirname, "../circuits/hidden_params.wasm");
+  const WASM_PATH = path.join(__dirname, "../circuits/hidden_params_js/hidden_params.wasm");
   const ZKEY_PATH = path.join(__dirname, "../circuits/hidden_params_0001.zkey");
 
   beforeEach(async function () {

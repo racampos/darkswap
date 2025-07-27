@@ -24,7 +24,7 @@ const SAMPLE_INPUTS = {
 
 // File paths
 const CIRCUITS_DIR = path.join(__dirname, "../circuits");
-const WASM_PATH = path.join(CIRCUITS_DIR, "hidden_params.wasm");
+const WASM_PATH = path.join(__dirname, "../circuits/hidden_params_js/hidden_params.wasm");
 const ZKEY_PATH = path.join(CIRCUITS_DIR, "hidden_params_0001.zkey");
 const PROOF_PATH = path.join(CIRCUITS_DIR, "proof.json");
 const PUBLIC_PATH = path.join(CIRCUITS_DIR, "public.json");

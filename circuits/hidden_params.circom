@@ -1,3 +1,7 @@
+pragma circom 2.0.0;
+
+include "circomlib/circuits/comparators.circom";
+
 /*
  * Hidden Parameter Orders Circuit (Production Version)
  * 
@@ -23,52 +27,10 @@
  *   - valid: 1 if all constraints satisfied, 0 otherwise
  */
 
-// Circomlib-based implementations adapted for circom 0.5.46
-// Based on circomlib/circuits/bitify.circom and circomlib/circuits/comparators.circom
-
-template Num2Bits(n) {
-    signal input in;
-    signal output out[n];
-    var lc1=0;
-
-    var e2=1;
-    for (var i = 0; i<n; i++) {
-        out[i] <-- (in >> i) & 1;
-        out[i] * (out[i] -1 ) === 0;
-        lc1 += out[i] * e2;
-        e2 = e2+e2;
-    }
-
-    lc1 === in;
-}
-
-template LessThan(n) {
-    assert(n <= 252);
-    signal input in[2];
-    signal output out;
-
-    component n2b = Num2Bits(n+1);
-
-    n2b.in <== in[0]+ (1<<n) - in[1];
-
-    out <== 1-n2b.out[n];
-}
-
-template GreaterEqThan(n) {
-    signal input in[2];
-    signal output out;
-
-    component lt = LessThan(n);
-
-    lt.in[0] <== in[1];
-    lt.in[1] <== in[0]+1;
-    lt.out ==> out;
-}
-
 template HiddenParams() {
-    // Private inputs (witness)
-    signal private input secretPrice;
-    signal private input secretAmount;
+    // Private inputs (witness) - all template signals are private by default
+    signal input secretPrice;
+    signal input secretAmount;
     
     // Public inputs  
     signal input commit;
@@ -111,5 +73,5 @@ template HiddenParams() {
     valid * (valid - 1) === 0;
 }
 
-// Main component
-component main = HiddenParams(); 
+// Main component with public signal specification
+component main {public [commit, nonce, offeredPrice, offeredAmount]} = HiddenParams(); 
