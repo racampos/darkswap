@@ -6,8 +6,12 @@
   "scripts": {
     "test": "hardhat test",
     "compile": "hardhat compile",
+    "build": "tsc",
+    "build:watch": "tsc --watch",
     "deploy:verifier": "hardhat ignition deploy ignition/modules/Groth16Verifier.ts --network hardhat",
     "test:verifier-deploy": "npm run compile && npm run deploy:verifier",
+    "test:proof-generation": "node scripts/generateProof.js",
+    "test:proof-format": "npm run test:proof-generation",
     "circuit:version": "circom --version && snarkjs --version",
     "circuit:help": "echo '\n=== ZK Circuit Commands ===\nnpm run circuit:version     - Check circom/snarkjs versions\nnpm run circuit:compile     - Compile circuits to .r1cs and .wasm\nnpm run circuit:setup       - Run trusted setup ceremony\nnpm run circuit:verify-setup - Verify trusted setup integrity\nnpm run circuit:generate-verifier - Generate Solidity verifier contract\nnpm run circuit:prove       - Generate proof for test inputs\nnpm run circuit:verify      - Verify proof\nnpm run circuit:info        - Show circuit statistics\n'",
     "circuit:compile": "cd circuits && circom hidden_params.circom --r1cs --wasm -o .",
@@ -15,7 +19,7 @@
     "circuit:verify-setup": "cd circuits && snarkjs zkey verify hidden_params.r1cs pot12_final.ptau hidden_params_0001.zkey && echo '\nTrusted setup verification completed successfully!'",
     "circuit:generate-verifier": "cd circuits && snarkjs zkey export solidityverifier hidden_params_0001.zkey ../contracts/Groth16Verifier.sol && echo '\n✅ Solidity verifier contract generated: contracts/Groth16Verifier.sol'",
     "circuit:info": "cd circuits && snarkjs r1cs info hidden_params.r1cs",
-    "circuit:prove": "cd circuits && node ../scripts/generateProof.js",
+    "circuit:prove": "npm run test:proof-generation",
     "circuit:verify": "cd circuits && snarkjs groth16 verify verification_key.json public.json proof.json"
   },
   "keywords": [],
@@ -27,6 +31,8 @@
     "circomlib": "^2.0.5",
     "snarkjs": "^0.7.5",
     "dotenv": "^17.2.1",
-    "hardhat": "^2.26.1"
+    "hardhat": "^2.26.1",
+    "typescript": "^5.0.0",
+    "ts-node": "^10.0.0"
   }
 }

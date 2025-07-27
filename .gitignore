@@ -32,3 +32,16 @@ circuits/js/
 circuits/artifacts/
 circuits/keys/
 circuits/powersoftau/
+
+# TypeScript compilation output
+dist/
+build/
+*.js.map
+*.d.ts
+
+# Compiled JS files from TS (but keep intentional JS files)
+hardhat.config.js
+ignition/modules/*.js
+test/**/*.js
+test/helpers/*.js
+src/**/*.js
