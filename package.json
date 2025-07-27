@@ -6,9 +6,10 @@
   "scripts": {
     "test": "hardhat test",
     "circuit:version": "circom --version && snarkjs --version",
-    "circuit:help": "echo '\n=== ZK Circuit Commands ===\nnpm run circuit:version     - Check circom/snarkjs versions\nnpm run circuit:compile     - Compile circuits to .r1cs and .wasm\nnpm run circuit:setup       - Run trusted setup ceremony\nnpm run circuit:prove       - Generate proof for test inputs\nnpm run circuit:verify      - Verify proof\nnpm run circuit:info        - Show circuit statistics\n'",
+    "circuit:help": "echo '\n=== ZK Circuit Commands ===\nnpm run circuit:version     - Check circom/snarkjs versions\nnpm run circuit:compile     - Compile circuits to .r1cs and .wasm\nnpm run circuit:setup       - Run trusted setup ceremony\nnpm run circuit:verify-setup - Verify trusted setup integrity\nnpm run circuit:prove       - Generate proof for test inputs\nnpm run circuit:verify      - Verify proof\nnpm run circuit:info        - Show circuit statistics\n'",
     "circuit:compile": "cd circuits && circom hidden_params.circom --r1cs --wasm -o .",
     "circuit:setup": "cd circuits && snarkjs powersoftau new bn128 12 pot12_0000.ptau && snarkjs powersoftau contribute pot12_0000.ptau pot12_0001.ptau --name='First contribution' -v && snarkjs powersoftau prepare phase2 pot12_0001.ptau pot12_final.ptau -v && snarkjs groth16 setup hidden_params.r1cs pot12_final.ptau hidden_params_0000.zkey && snarkjs zkey contribute hidden_params_0000.zkey hidden_params_0001.zkey --name='First contribution' -v && snarkjs zkey export verificationkey hidden_params_0001.zkey verification_key.json",
+    "circuit:verify-setup": "cd circuits && snarkjs zkey verify hidden_params.r1cs pot12_final.ptau hidden_params_0001.zkey && echo '\nTrusted setup verification completed successfully!'",
     "circuit:info": "cd circuits && snarkjs r1cs info hidden_params.r1cs",
     "circuit:prove": "cd circuits && node ../scripts/generateProof.js",
     "circuit:verify": "cd circuits && snarkjs groth16 verify verification_key.json public.json proof.json"
