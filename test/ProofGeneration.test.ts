@@ -46,7 +46,7 @@ describe("ZK Proof Generation SDK", function () {
       expect(offeredPrice).to.be.gte(secretPrice, "Offered price should be >= secret price");
       expect(offeredAmount).to.be.gte(secretAmount, "Offered amount should be >= secret amount");
       
-      console.log("      ✅ All input constraints satisfied");
+      console.log("      All input constraints satisfied");
     });
 
     it("should detect constraint violations", function () {
@@ -62,7 +62,7 @@ describe("ZK Proof Generation SDK", function () {
       
       expect(invalidAmount).to.be.lt(secretAmount, "Should detect amount constraint violation");
       
-      console.log("      ✅ Constraint violations detected correctly");
+      console.log("      Constraint violations detected correctly");
     });
   });
 
@@ -70,7 +70,7 @@ describe("ZK Proof Generation SDK", function () {
     it("should generate valid ZK proof", async function () {
       this.timeout(30000); // ZK proof generation can take time
       
-      console.log("      🔄 Generating ZK proof...");
+      console.log("      Generating ZK proof...");
       
       // Generate proof using snarkjs directly (working implementation)
       const { proof, publicSignals } = await snarkjs.groth16.fullProve(
@@ -94,8 +94,8 @@ describe("ZK Proof Generation SDK", function () {
       expect(publicSignals[3]).to.equal(SAMPLE_INPUTS.offeredPrice);
       expect(publicSignals[4]).to.equal(SAMPLE_INPUTS.offeredAmount);
 
-      console.log("      ✅ ZK proof generated successfully");
-      console.log("      📊 Proof contains", proof.pi_a.length, "field elements in pi_a");
+      console.log("      ZK proof generated successfully");
+      console.log("      Proof contains", proof.pi_a.length, "field elements in pi_a");
     });
 
     it("should format proof for contract consumption", async function () {
@@ -126,7 +126,7 @@ describe("ZK Proof Generation SDK", function () {
       expect(contractProof.b[1]).to.have.length(2);
       expect(contractProof.c).to.have.length(2);
 
-      console.log("      ✅ Proof formatted for contract consumption");
+      console.log("      Proof formatted for contract consumption");
     });
   });
 
@@ -134,7 +134,7 @@ describe("ZK Proof Generation SDK", function () {
     it("should verify proof on-chain", async function () {
       this.timeout(30000);
       
-      console.log("      🔄 Testing on-chain verification...");
+      console.log("      Testing on-chain verification...");
       
       // Generate proof
       const { proof, publicSignals } = await snarkjs.groth16.fullProve(
@@ -150,8 +150,8 @@ describe("ZK Proof Generation SDK", function () {
       ];
       
       const contractB: [[bigint, bigint], [bigint, bigint]] = [
-        [BigInt(proof.pi_b[0][0]), BigInt(proof.pi_b[0][1])],
-        [BigInt(proof.pi_b[1][0]), BigInt(proof.pi_b[1][1])]
+        [BigInt(proof.pi_b[0][1]), BigInt(proof.pi_b[0][0])], // Swapped coordinates
+        [BigInt(proof.pi_b[1][1]), BigInt(proof.pi_b[1][0])]  // Swapped coordinates
       ];
       
       const contractC: [bigint, bigint] = [
@@ -176,7 +176,7 @@ describe("ZK Proof Generation SDK", function () {
       );
 
       expect(isValid).to.be.true;
-      console.log("      ✅ On-chain verification successful");
+      console.log("      On-chain verification successful");
     });
 
     it("should reject invalid proofs on-chain", async function () {
@@ -196,7 +196,7 @@ describe("ZK Proof Generation SDK", function () {
       );
 
       expect(isValid).to.be.false;
-      console.log("      ✅ Invalid proof correctly rejected on-chain");
+      console.log("      Invalid proof correctly rejected on-chain");
     });
   });
 
@@ -204,16 +204,16 @@ describe("ZK Proof Generation SDK", function () {
     it("should complete full ZK proof workflow", async function () {
       this.timeout(30000);
       
-      console.log("      🚀 Running complete ZK workflow...");
+      console.log("      Running complete ZK workflow...");
       
       // 1. Validate inputs
-      console.log("      1️⃣  Validating inputs...");
+      console.log("      1. Validating inputs...");
       const secretPrice = BigInt(SAMPLE_INPUTS.secretPrice);
       const offeredPrice = BigInt(SAMPLE_INPUTS.offeredPrice);
       expect(offeredPrice).to.be.gte(secretPrice);
       
       // 2. Generate proof
-      console.log("      2️⃣  Generating proof...");
+      console.log("      2. Generating proof...");
       const { proof, publicSignals } = await snarkjs.groth16.fullProve(
         SAMPLE_INPUTS,
         WASM_PATH,
@@ -222,19 +222,19 @@ describe("ZK Proof Generation SDK", function () {
       expect(proof).to.have.property('pi_a');
       
       // 3. Format for contract
-      console.log("      3️⃣  Formatting for contract...");
+      console.log("      3. Formatting for contract...");
       const contractProof = {
         a: [BigInt(proof.pi_a[0]), BigInt(proof.pi_a[1])] as [bigint, bigint],
         b: [
-          [BigInt(proof.pi_b[0][0]), BigInt(proof.pi_b[0][1])],
-          [BigInt(proof.pi_b[1][0]), BigInt(proof.pi_b[1][1])]
+          [BigInt(proof.pi_b[0][1]), BigInt(proof.pi_b[0][0])], // Swapped coordinates
+          [BigInt(proof.pi_b[1][1]), BigInt(proof.pi_b[1][0])]  // Swapped coordinates
         ] as [[bigint, bigint], [bigint, bigint]],
         c: [BigInt(proof.pi_c[0]), BigInt(proof.pi_c[1])] as [bigint, bigint],
         signals: publicSignals.map(s => BigInt(s)) as [bigint, bigint, bigint, bigint, bigint]
       };
       
       // 4. Verify on-chain
-      console.log("      4️⃣  Verifying on-chain...");
+      console.log("      4. Verifying on-chain...");
       const isValid = await verifier.verifyProof(
         contractProof.a,
         contractProof.b,
@@ -243,7 +243,7 @@ describe("ZK Proof Generation SDK", function () {
       );
       
       expect(isValid).to.be.true;
-      console.log("      ✅ Complete workflow successful!");
+      console.log("      Complete workflow successful!");
     });
   });
 }); 

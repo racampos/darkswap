@@ -1,5 +1,5 @@
 /*
- * Hidden Parameter Orders Circuit (Simplified Version)
+ * Hidden Parameter Orders Circuit (Production Version)
  * 
  * Proves that a taker's offer satisfies the maker's secret minimum thresholds
  * without revealing the actual threshold values on-chain.
@@ -23,6 +23,48 @@
  *   - valid: 1 if all constraints satisfied, 0 otherwise
  */
 
+// Circomlib-based implementations adapted for circom 0.5.46
+// Based on circomlib/circuits/bitify.circom and circomlib/circuits/comparators.circom
+
+template Num2Bits(n) {
+    signal input in;
+    signal output out[n];
+    var lc1=0;
+
+    var e2=1;
+    for (var i = 0; i<n; i++) {
+        out[i] <-- (in >> i) & 1;
+        out[i] * (out[i] -1 ) === 0;
+        lc1 += out[i] * e2;
+        e2 = e2+e2;
+    }
+
+    lc1 === in;
+}
+
+template LessThan(n) {
+    assert(n <= 252);
+    signal input in[2];
+    signal output out;
+
+    component n2b = Num2Bits(n+1);
+
+    n2b.in <== in[0]+ (1<<n) - in[1];
+
+    out <== 1-n2b.out[n];
+}
+
+template GreaterEqThan(n) {
+    signal input in[2];
+    signal output out;
+
+    component lt = LessThan(n);
+
+    lt.in[0] <== in[1];
+    lt.in[1] <== in[0]+1;
+    lt.out ==> out;
+}
+
 template HiddenParams() {
     // Private inputs (witness)
     signal private input secretPrice;
@@ -37,30 +79,36 @@ template HiddenParams() {
     // Output signal
     signal output valid;
     
-    // Intermediate signals for difference calculations
-    signal commitmentDiff;
-    signal priceDiff;
-    signal amountDiff;
+    // Intermediate signals for constraint enforcement
+    signal commitmentCheck;
+    signal priceValid;
+    signal amountValid;
+    signal allConstraintsSatisfied;
     
     // Constraint 1: Verify commitment binding
-    // commit should equal secretPrice + secretAmount + nonce
-    commitmentDiff <-- commit - (secretPrice + secretAmount + nonce);
-    commitmentDiff === 0;
+    // commit must equal secretPrice + secretAmount + nonce
+    commitmentCheck <== commit - (secretPrice + secretAmount + nonce);
+    commitmentCheck === 0;
     
     // Constraint 2: Price constraint (offeredPrice >= secretPrice)
-    // priceDiff should be non-negative (offeredPrice - secretPrice >= 0)
-    priceDiff <-- offeredPrice - secretPrice;
-    // For now, we'll trust the constraint will be verified during witness generation
-    // Note: Proper range checking would require more complex constraints
+    component priceConstraint = GreaterEqThan(64); // 64-bit numbers
+    priceConstraint.in[0] <== offeredPrice;
+    priceConstraint.in[1] <== secretPrice;
+    priceValid <== priceConstraint.out;
     
-    // Constraint 3: Amount constraint (offeredAmount >= secretAmount)
-    // amountDiff should be non-negative (offeredAmount - secretAmount >= 0)  
-    amountDiff <-- offeredAmount - secretAmount;
-    // For now, we'll trust the constraint will be verified during witness generation
+    // Constraint 3: Amount constraint (offeredAmount >= secretAmount)  
+    component amountConstraint = GreaterEqThan(64); // 64-bit numbers
+    amountConstraint.in[0] <== offeredAmount;
+    amountConstraint.in[1] <== secretAmount;
+    amountValid <== amountConstraint.out;
     
-    // Output valid = 1 (simplified for now)
-    // In a complete implementation, this would check that all differences are >= 0
-    valid <-- 1;
+    // All constraints must be satisfied for valid output
+    // valid = 1 if priceValid AND amountValid both equal 1
+    allConstraintsSatisfied <== priceValid * amountValid;
+    valid <== allConstraintsSatisfied;
+    
+    // Ensure valid is boolean (0 or 1)
+    valid * (valid - 1) === 0;
 }
 
 // Main component
