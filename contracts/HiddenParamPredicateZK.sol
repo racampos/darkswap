@@ -16,22 +16,21 @@ contract HiddenParamPredicateZK {
     /// @dev Expected length of ABI-encoded proof data (13 uint256 values = 416 bytes + encoding overhead)
     uint256 private constant MIN_PROOF_DATA_LENGTH = 416;
 
+    /// @dev Gas-optimized constants for validation
+    uint256 private constant MAX_REASONABLE_NONCE = type(uint128).max;
+    uint256 private constant VALID_FLAG_TRUE = 1;
+
     /**
      * @dev Custom errors for gas-efficient error handling
      */
     error InvalidProofDataLength();
     error ProofDecodingFailed();
     error InvalidPublicSignals();
-
-    /**
-     * @dev Decoded proof components structure
-     */
-    struct DecodedProof {
-        uint256[2] pi_a;
-        uint256[2][2] pi_b;
-        uint256[2] pi_c;
-        uint256[5] publicSignals;
-    }
+    error ZeroCommitment();
+    error ZeroPrice();
+    error ZeroAmount();
+    error NonceOverflow();
+    error VerificationFailed();
 
     /**
      * @dev Constructor sets the Groth16 verifier contract address
@@ -46,71 +45,98 @@ contract HiddenParamPredicateZK {
     }
 
     /**
-     * @dev Standard 1inch LOP predicate interface
+     * @dev Standard 1inch LOP predicate interface with gas optimizations
      * @param data ABI-encoded proof data containing ZK proof and public signals
      * @return result 1 if proof is valid and constraints satisfied, 0 otherwise
+     *
+     * @notice Gas optimized for production use with early exits and efficient validation
+     * @notice Validates proof structure, decodes components, verifies cryptographic proof,
+     *         and enforces business logic constraints in a single optimized flow
      */
     function predicate(
         bytes calldata data
     ) external view returns (uint256 result) {
-        // Basic input validation
-        if (data.length == 0) {
-            return 0; // Invalid: empty proof data
-        }
+        // Early exit for empty data (gas optimization)
+        if (data.length == 0) return 0;
 
-        if (data.length < MIN_PROOF_DATA_LENGTH) {
-            return 0; // Invalid: insufficient data length
-        }
+        // Early exit for insufficient data (gas optimization)
+        if (data.length < MIN_PROOF_DATA_LENGTH) return 0;
 
-        // Decode proof data from bytes
-        DecodedProof memory proof;
-        bool decodingSuccess = _decodeProofData(data, proof);
+        // Stack variables for gas optimization (avoid repeated struct access)
+        uint256[2] memory pi_a;
+        uint256[2][2] memory pi_b;
+        uint256[2] memory pi_c;
+        uint256[5] memory publicSignals;
 
-        if (!decodingSuccess) {
-            return 0; // Invalid: decoding failed
-        }
+        // Decode proof data with optimized error handling
+        bool decodingSuccess = _decodeProofDataOptimized(
+            data,
+            pi_a,
+            pi_b,
+            pi_c,
+            publicSignals
+        );
+        if (!decodingSuccess) return 0;
 
-        // Validate public signals
-        if (!_validatePublicSignals(proof.publicSignals)) {
-            return 0; // Invalid: malformed public signals
-        }
+        // Fast validation of public signals with early exits
+        if (!_validatePublicSignalsOptimized(publicSignals)) return 0;
 
-        // Verify ZK proof using Groth16 verifier
-        bool proofValid = _verifyZKProof(proof);
+        // Verify ZK proof with gas-efficient verifier call
+        if (!_verifyZKProofOptimized(pi_a, pi_b, pi_c, publicSignals)) return 0;
 
-        if (!proofValid) {
-            return 0; // Invalid: proof verification failed
-        }
-
-        // Additional constraint validation
-        if (!_validateConstraints(proof.publicSignals)) {
-            return 0; // Invalid: constraint validation failed
-        }
-
-        // All validations passed
-        return 1;
+        // All validations passed - return success
+        return VALID_FLAG_TRUE;
     }
 
     /**
-     * @dev Decodes ABI-encoded proof data into components
+     * @dev Gas-optimized proof data decoding using stack variables
      * @param data ABI-encoded bytes containing proof components
-     * @param proof Output struct to populate with decoded data
+     * @param pi_a Output array for proof component A
+     * @param pi_b Output array for proof component B
+     * @param pi_c Output array for proof component C
+     * @param publicSignals Output array for public signals
      * @return success True if decoding succeeded, false otherwise
+     *
+     * @notice Uses stack variables instead of structs for gas efficiency
+     * @notice Avoids memory allocation overhead of DecodedProof struct
      */
-    function _decodeProofData(
+    function _decodeProofDataOptimized(
         bytes calldata data,
-        DecodedProof memory proof
+        uint256[2] memory pi_a,
+        uint256[2][2] memory pi_b,
+        uint256[2] memory pi_c,
+        uint256[5] memory publicSignals
     ) internal view returns (bool success) {
+        // Basic length check for gas efficiency
+        if (data.length < MIN_PROOF_DATA_LENGTH) {
+            return false;
+        }
+
         try this._unsafeDecodeProofData(data) returns (
-            uint256[2] memory pi_a,
-            uint256[2][2] memory pi_b,
-            uint256[2] memory pi_c,
-            uint256[5] memory publicSignals
+            uint256[2] memory _pi_a,
+            uint256[2][2] memory _pi_b,
+            uint256[2] memory _pi_c,
+            uint256[5] memory _publicSignals
         ) {
-            proof.pi_a = pi_a;
-            proof.pi_b = pi_b;
-            proof.pi_c = pi_c;
-            proof.publicSignals = publicSignals;
+            // Direct assignment for gas efficiency
+            pi_a[0] = _pi_a[0];
+            pi_a[1] = _pi_a[1];
+
+            pi_b[0][0] = _pi_b[0][0];
+            pi_b[0][1] = _pi_b[0][1];
+            pi_b[1][0] = _pi_b[1][0];
+            pi_b[1][1] = _pi_b[1][1];
+
+            pi_c[0] = _pi_c[0];
+            pi_c[1] = _pi_c[1];
+
+            // Unrolled loop for gas efficiency
+            publicSignals[0] = _publicSignals[0];
+            publicSignals[1] = _publicSignals[1];
+            publicSignals[2] = _publicSignals[2];
+            publicSignals[3] = _publicSignals[3];
+            publicSignals[4] = _publicSignals[4];
+
             return true;
         } catch {
             return false;
@@ -146,92 +172,63 @@ contract HiddenParamPredicateZK {
     }
 
     /**
-     * @dev Validates public signals for basic sanity checks
-     * @param publicSignals Array of 5 public signals
-     * @return valid True if signals pass validation
+     * @dev Gas-optimized public signal validation with early exits
+     * @param signals Array of 5 public signals [valid, commit, nonce, offeredPrice, offeredAmount]
+     * @return valid True if all signals pass validation
+     *
+     * @notice Optimized validation order: most likely failures first
+     * @notice Uses constants and early exits for gas efficiency
      */
-    function _validatePublicSignals(
-        uint256[5] memory publicSignals
+    function _validatePublicSignalsOptimized(
+        uint256[5] memory signals
     ) internal pure returns (bool valid) {
-        // Basic validation: valid signal should be 0 or 1
-        if (publicSignals[0] > 1) {
-            return false;
-        }
+        // Check valid flag first (most critical, likely to fail)
+        if (signals[0] != VALID_FLAG_TRUE) return false;
 
-        // Additional validations can be added here:
-        // - Check commit is non-zero
-        // - Check nonce is reasonable
-        // - Check offered prices/amounts are non-zero
-        // For now, we just check the valid flag
+        // Check for zero values (common attack vector, likely to fail)
+        if (signals[1] == 0) return false; // Zero commitment
+        if (signals[3] == 0) return false; // Zero offered price
+        if (signals[4] == 0) return false; // Zero offered amount
+
+        // Check nonce overflow (less likely, check last)
+        if (signals[2] > MAX_REASONABLE_NONCE) return false;
 
         return true;
     }
 
     /**
-     * @dev Verifies ZK proof using the Groth16 verifier contract
-     * @param proof Decoded proof components
+     * @dev Gas-optimized ZK proof verification
+     * @param pi_a Proof component A
+     * @param pi_b Proof component B
+     * @param pi_c Proof component C
+     * @param signals Public signals array
      * @return valid True if proof verification succeeds
+     *
+     * @notice Direct verifier call without struct overhead
+     * @notice Optimized error handling for gas efficiency
      */
-    function _verifyZKProof(
-        DecodedProof memory proof
+    function _verifyZKProofOptimized(
+        uint256[2] memory pi_a,
+        uint256[2][2] memory pi_b,
+        uint256[2] memory pi_c,
+        uint256[5] memory signals
     ) internal view returns (bool valid) {
-        try
-            verifier.verifyProof(
-                proof.pi_a,
-                proof.pi_b,
-                proof.pi_c,
-                proof.publicSignals
-            )
-        returns (bool result) {
+        // Direct verifier call for gas efficiency
+        try verifier.verifyProof(pi_a, pi_b, pi_c, signals) returns (
+            bool result
+        ) {
             return result;
         } catch {
-            // Verification failed (invalid proof or verifier error)
+            // Any verifier error means invalid proof
             return false;
         }
-    }
-
-    /**
-     * @dev Validates constraint satisfaction from public signals
-     * @param publicSignals Array of 5 public signals [valid, commit, nonce, offeredPrice, offeredAmount]
-     * @return valid True if constraints are satisfied
-     */
-    function _validateConstraints(
-        uint256[5] memory publicSignals
-    ) internal pure returns (bool valid) {
-        // Extract public signals
-        uint256 validFlag = publicSignals[0];
-        uint256 commit = publicSignals[1];
-        uint256 nonce = publicSignals[2];
-        uint256 offeredPrice = publicSignals[3];
-        uint256 offeredAmount = publicSignals[4];
-
-        // Constraint 1: Circuit must output valid = 1
-        if (validFlag != 1) {
-            return false;
-        }
-
-        // Constraint 2: Commitment must be non-zero (meaningful commitment)
-        if (commit == 0) {
-            return false;
-        }
-
-        // Constraint 3: Offered price and amount must be non-zero (meaningful trade)
-        if (offeredPrice == 0 || offeredAmount == 0) {
-            return false;
-        }
-
-        // Constraint 4: Nonce should be reasonable (prevent overflow/underflow attacks)
-        // Allow zero nonce but prevent extremely large values that could indicate overflow
-        if (nonce > type(uint128).max) {
-            return false;
-        }
-
-        return true;
     }
 
     /**
      * @dev Returns the address of the Groth16 verifier contract
      * @return The verifier contract address
+     *
+     * @notice Immutable reference for gas efficiency and security
      */
     function getVerifier() external view returns (address) {
         return address(verifier);
@@ -240,8 +237,109 @@ contract HiddenParamPredicateZK {
     /**
      * @dev Returns expected minimum proof data length for validation
      * @return The minimum expected byte length
+     *
+     * @notice Used for off-chain validation and gas estimation
      */
     function getMinProofDataLength() external pure returns (uint256) {
         return MIN_PROOF_DATA_LENGTH;
+    }
+
+    /**
+     * @dev Returns maximum reasonable nonce value for validation
+     * @return The maximum nonce value accepted
+     *
+     * @notice Prevents overflow attacks and unreasonable nonce values
+     */
+    function getMaxReasonableNonce() external pure returns (uint256) {
+        return MAX_REASONABLE_NONCE;
+    }
+
+    /**
+     * @dev Gas estimation helper for off-chain optimization
+     * @param data Proof data to estimate gas for
+     * @return gasEstimate Estimated gas usage for predicate call
+     *
+     * @notice Static call version for gas estimation without state changes
+     * @notice Useful for transaction optimization and fee calculation
+     */
+    function estimatePredicateGas(
+        bytes calldata data
+    ) external view returns (uint256 gasEstimate) {
+        uint256 gasStart = gasleft();
+        this.predicate(data);
+        return gasStart - gasleft();
+    }
+
+    /**
+     * @dev Enhanced error reporting for failed predicate calls
+     * @param data Proof data that failed validation
+     * @return errorCode Specific error code for the failure
+     * @return errorMessage Human-readable error description
+     *
+     * @notice Provides detailed failure analysis for debugging
+     * @notice Only for off-chain use due to gas cost
+     */
+    function diagnoseFailure(
+        bytes calldata data
+    ) external view returns (uint256 errorCode, string memory errorMessage) {
+        // Check basic data validation
+        if (data.length == 0) {
+            return (1, "Empty proof data");
+        }
+
+        if (data.length < MIN_PROOF_DATA_LENGTH) {
+            return (2, "Insufficient proof data length");
+        }
+
+        // Attempt decoding
+        uint256[2] memory pi_a;
+        uint256[2][2] memory pi_b;
+        uint256[2] memory pi_c;
+        uint256[5] memory publicSignals;
+
+        bool decodingSuccess = _decodeProofDataOptimized(
+            data,
+            pi_a,
+            pi_b,
+            pi_c,
+            publicSignals
+        );
+        if (!decodingSuccess) {
+            return (3, "Proof data decoding failed");
+        }
+
+        // Check public signals
+        if (publicSignals[0] != VALID_FLAG_TRUE) {
+            return (4, "Circuit output invalid (constraint violation)");
+        }
+
+        if (publicSignals[1] == 0) {
+            return (5, "Zero commitment not allowed");
+        }
+
+        if (publicSignals[3] == 0) {
+            return (6, "Zero offered price not allowed");
+        }
+
+        if (publicSignals[4] == 0) {
+            return (7, "Zero offered amount not allowed");
+        }
+
+        if (publicSignals[2] > MAX_REASONABLE_NONCE) {
+            return (8, "Nonce overflow detected");
+        }
+
+        // Check proof verification
+        bool proofValid = _verifyZKProofOptimized(
+            pi_a,
+            pi_b,
+            pi_c,
+            publicSignals
+        );
+        if (!proofValid) {
+            return (9, "Cryptographic proof verification failed");
+        }
+
+        return (0, "No error detected - proof should be valid");
     }
 }
