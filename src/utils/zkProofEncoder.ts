@@ -18,17 +18,17 @@ export interface EncodedZKProofData {
  * Validates ZK proof structure before encoding
  */
 function validateZKProof(proof: ZKProof): void {
-  if (!proof.pi_a || proof.pi_a.length !== 2) {
-    throw new Error("Invalid pi_a: must be array of 2 elements");
+  if (!proof.pi_a || proof.pi_a.length !== 3) {
+    throw new Error("Invalid pi_a: must be array of 3 elements (projective coordinates)");
   }
   
-  if (!proof.pi_b || proof.pi_b.length !== 2 || 
-      proof.pi_b[0].length !== 2 || proof.pi_b[1].length !== 2) {
-    throw new Error("Invalid pi_b: must be 2x2 array");
+  if (!proof.pi_b || proof.pi_b.length !== 3 || 
+      proof.pi_b[0].length !== 2 || proof.pi_b[1].length !== 2 || proof.pi_b[2].length !== 2) {
+    throw new Error("Invalid pi_b: must be 3x2 array (G2 point with projective coordinate)");
   }
   
-  if (!proof.pi_c || proof.pi_c.length !== 2) {
-    throw new Error("Invalid pi_c: must be array of 2 elements");
+  if (!proof.pi_c || proof.pi_c.length !== 3) {
+    throw new Error("Invalid pi_c: must be array of 3 elements (projective coordinates)");
   }
 }
 
@@ -52,7 +52,7 @@ function validatePublicSignals(signals: PublicSignals): void {
 
 /**
  * Formats ZK proof for Solidity verifier consumption
- * Handles G2 coordinate swapping for pi_b components
+ * Handles projective coordinates and G2 coordinate swapping
  */
 function formatProofForSolidity(proof: ZKProof): {
   pi_a: [bigint, bigint];
@@ -60,12 +60,15 @@ function formatProofForSolidity(proof: ZKProof): {
   pi_c: [bigint, bigint];
 } {
   return {
+    // Convert from projective coordinates (take first 2 elements)
     pi_a: [BigInt(proof.pi_a[0]), BigInt(proof.pi_a[1])],
     // G2 coordinates need to be swapped for Solidity compatibility
+    // Also convert from projective coordinates (take first 2 elements of each)
     pi_b: [
       [BigInt(proof.pi_b[0][1]), BigInt(proof.pi_b[0][0])], // Swapped coordinates
       [BigInt(proof.pi_b[1][1]), BigInt(proof.pi_b[1][0])]  // Swapped coordinates
     ],
+    // Convert from projective coordinates (take first 2 elements)
     pi_c: [BigInt(proof.pi_c[0]), BigInt(proof.pi_c[1])]
   };
 }

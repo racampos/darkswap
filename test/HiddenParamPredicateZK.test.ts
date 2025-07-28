@@ -57,12 +57,12 @@ describe("HiddenParamPredicateZK - Basic Structure", function () {
       console.log("Empty data correctly rejected");
     });
 
-    it("should return 1 for non-empty data (placeholder)", async function () {
-      // Test with dummy data - should return 1 due to placeholder logic
+    it("should return 0 for invalid proof data", async function () {
+      // Test with dummy data - should return 0 due to real ZK verification
       const dummyData = "0x1234567890abcdef";
       const result = await zkPredicate.predicate(dummyData);
-      expect(result).to.equal(1);
-      console.log("Non-empty data accepted (placeholder behavior)");
+      expect(result).to.equal(0);
+      console.log("Invalid proof data correctly rejected");
     });
   });
 
@@ -77,10 +77,10 @@ describe("HiddenParamPredicateZK - Basic Structure", function () {
         data: zkPredicate.interface.encodeFunctionData("predicate", [dummyData])
       });
       
-      // Decode the result
+      // Decode the result - should be 0 for invalid proof data
       const decoded = zkPredicate.interface.decodeFunctionResult("predicate", result);
-      expect(decoded[0]).to.equal(1);
-      console.log("Static call pattern verified");
+      expect(decoded[0]).to.equal(0);
+      console.log("Static call pattern verified - invalid data correctly rejected");
     });
 
     it("should have immutable verifier reference", async function () {

@@ -75,11 +75,19 @@ contract HiddenParamPredicateZK {
             return 0; // Invalid: malformed public signals
         }
 
-        // TODO (Commit 2.3): Call verifier.verifyProof() with decoded components
-        // TODO (Commit 2.3): Return actual verification result
+        // Verify ZK proof using Groth16 verifier
+        bool proofValid = _verifyZKProof(proof);
 
-        // Placeholder: Return success if decoding worked
-        // This confirms the data pipeline is working correctly
+        if (!proofValid) {
+            return 0; // Invalid: proof verification failed
+        }
+
+        // Additional constraint validation
+        if (!_validateConstraints(proof.publicSignals)) {
+            return 0; // Invalid: constraint validation failed
+        }
+
+        // All validations passed
         return 1;
     }
 
@@ -155,6 +163,68 @@ contract HiddenParamPredicateZK {
         // - Check nonce is reasonable
         // - Check offered prices/amounts are non-zero
         // For now, we just check the valid flag
+
+        return true;
+    }
+
+    /**
+     * @dev Verifies ZK proof using the Groth16 verifier contract
+     * @param proof Decoded proof components
+     * @return valid True if proof verification succeeds
+     */
+    function _verifyZKProof(
+        DecodedProof memory proof
+    ) internal view returns (bool valid) {
+        try
+            verifier.verifyProof(
+                proof.pi_a,
+                proof.pi_b,
+                proof.pi_c,
+                proof.publicSignals
+            )
+        returns (bool result) {
+            return result;
+        } catch {
+            // Verification failed (invalid proof or verifier error)
+            return false;
+        }
+    }
+
+    /**
+     * @dev Validates constraint satisfaction from public signals
+     * @param publicSignals Array of 5 public signals [valid, commit, nonce, offeredPrice, offeredAmount]
+     * @return valid True if constraints are satisfied
+     */
+    function _validateConstraints(
+        uint256[5] memory publicSignals
+    ) internal pure returns (bool valid) {
+        // Extract public signals
+        uint256 validFlag = publicSignals[0];
+        uint256 commit = publicSignals[1];
+        uint256 nonce = publicSignals[2];
+        uint256 offeredPrice = publicSignals[3];
+        uint256 offeredAmount = publicSignals[4];
+
+        // Constraint 1: Circuit must output valid = 1
+        if (validFlag != 1) {
+            return false;
+        }
+
+        // Constraint 2: Commitment must be non-zero (meaningful commitment)
+        if (commit == 0) {
+            return false;
+        }
+
+        // Constraint 3: Offered price and amount must be non-zero (meaningful trade)
+        if (offeredPrice == 0 || offeredAmount == 0) {
+            return false;
+        }
+
+        // Constraint 4: Nonce should be reasonable (prevent overflow/underflow attacks)
+        // Allow zero nonce but prevent extremely large values that could indicate overflow
+        if (nonce > type(uint128).max) {
+            return false;
+        }
 
         return true;
     }

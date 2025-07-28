@@ -18,9 +18,9 @@ export interface ZKProofInputs {
 
 // Raw proof output from snarkjs
 export interface ZKProof {
-  pi_a: [string, string];
-  pi_b: [[string, string], [string, string]];
-  pi_c: [string, string];
+  pi_a: [string, string, string];  // Projective coordinates (3 elements)
+  pi_b: [[string, string], [string, string], [string, string]]; // G2 point with projective coordinate (3x2)
+  pi_c: [string, string, string];  // Projective coordinates (3 elements)
   protocol: string;
   curve: string;
 }
