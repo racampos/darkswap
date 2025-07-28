@@ -20,6 +20,8 @@
     "test:gas-benchmarks": "npx hardhat test test/GasBenchmarks.test.ts",
     "test:gas-optimization": "npx hardhat test test/GasBenchmarks.test.ts --grep 'Performance Comparison'",
     "test:production-utils": "npx hardhat test test/GasBenchmarks.test.ts --grep 'Production Utility'",
+    "test:commitment-utils": "npx hardhat test test/CommitmentUtils.test.ts",
+    "test:commitment-validate": "npx hardhat test test/CommitmentUtils.test.ts --grep 'Validation'",
     "test:proof-generation": "node scripts/generateProof.js",
     "test:proof-format": "npm run test:proof-generation",
     "circuit:version": "circom --version && snarkjs --version",
