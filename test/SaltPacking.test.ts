@@ -309,5 +309,36 @@ describe("Salt Packing System", function () {
       console.log(`   Commitment (hex): ${commitmentHex}`);
       console.log(`   Extension hash (hex): ${extensionHashHex}`);
     });
+
+    it("should debug the specific failing salt values", function () {
+      // Use the exact values from the failing test
+      const commitment = BigInt("10287555218000779294576909654168689621082178776075445486112757628723489970785");
+      const extensionHash = BigInt("979126982140690785162425857413797171931359098053");
+      
+      console.log("=== Debugging Specific Failing Values ===");
+      console.log("Input commitment:", commitment.toString());
+      console.log("Input extension hash:", extensionHash.toString());
+      
+      // Test packing
+      const packed = packSalt(commitment, extensionHash);
+      console.log("Packed salt:", packed.salt.toString());
+      console.log("Packed commitment (truncated):", packed.commitment.toString());
+      console.log("Packed extension hash:", packed.extensionHash.toString());
+      
+      // Test unpacking
+      const unpacked = unpackSalt(packed.salt);
+      console.log("Unpacked commitment:", unpacked.commitment.toString());
+      console.log("Unpacked extension hash:", unpacked.extensionHash.toString());
+      
+      // Compare
+      const expectedCommitment = truncateCommitment(commitment);
+      console.log("Expected commitment (truncated):", expectedCommitment.toString());
+      
+      // Verify round-trip
+      expect(unpacked.commitment).to.equal(expectedCommitment);
+      expect(unpacked.extensionHash).to.equal(extensionHash);
+      
+      console.log("✅ Salt round-trip test passed");
+    });
   });
 }); 

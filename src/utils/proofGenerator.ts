@@ -142,14 +142,19 @@ export function formatProofForContract(
   publicSignals: PublicSignals,
   inputs: ZKProofInputs
 ): ZKProofData {
+  // Convert from projective coordinates (3 elements) to affine coordinates (2 elements)
+  // and handle G2 coordinate swapping for Solidity compatibility
   return {
     commit: inputs.commit,
     nonce: inputs.nonce,
     offeredPrice: inputs.offeredPrice,
     offeredAmount: inputs.offeredAmount,
-    a: proof.pi_a,
-    b: proof.pi_b,
-    c: proof.pi_c
+    a: [proof.pi_a[0], proof.pi_a[1]], // Take first 2 elements (affine coordinates)
+    b: [
+      [proof.pi_b[0][1], proof.pi_b[0][0]], // Swapped coordinates for G2 point
+      [proof.pi_b[1][1], proof.pi_b[1][0]]  // Swapped coordinates for G2 point
+    ],
+    c: [proof.pi_c[0], proof.pi_c[1]]  // Take first 2 elements (affine coordinates)
   };
 }
 
