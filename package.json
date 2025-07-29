@@ -24,6 +24,8 @@
     "test:commitment-validate": "npx hardhat test test/CommitmentUtils.test.ts --grep 'Validation'",
     "test:salt-packing": "npx hardhat test test/SaltPacking.test.ts",
     "test:salt-integration": "npx hardhat test test/SaltPacking.test.ts --grep 'Integration'",
+    "test:zk-extension-build": "npx hardhat test test/ZKExtensionBuilder.test.ts",
+    "test:extension-integration": "npx hardhat test test/ZKExtensionBuilder.test.ts --grep 'Integration'",
     "test:proof-generation": "node scripts/generateProof.js",
     "test:proof-format": "npm run test:proof-generation",
     "circuit:version": "circom --version && snarkjs --version",
