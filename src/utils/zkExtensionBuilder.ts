@@ -143,9 +143,10 @@ export function buildZKExtension(
     throw new Error(`Invalid predicate address: ${predicateAddress}`);
   }
   
-  // Build the predicate call using the router's arbitraryStaticCall function
+  // Build the predicate call using proper ABI encoding (matches working debug test approach)
   // This creates: arbitraryStaticCall(predicateAddress, abi.encodeCall(predicate, zkProofData))
-  const predicateCalldata = ZK_EXTENSION_CONFIG.PREDICATE_SELECTOR + zkProofData.slice(2); // Remove 0x from proof data
+  const predicateInterface = new ethers.Interface(["function predicate(bytes calldata data) external view returns (uint256)"]);
+  const predicateCalldata = predicateInterface.encodeFunctionData("predicate", [zkProofData]);
   const arbitraryCall = createArbitraryStaticCall(routerInterface, predicateAddress, predicateCalldata);
   
   // 🔑 CRITICAL FIX: Wrap arbitraryStaticCall in gt() to check if result > 0

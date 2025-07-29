@@ -55,24 +55,28 @@ describe("ZK Order Filling", function () {
     wethContract = await ethers.getContractAt("MockERC20", WETH_ADDRESS);
     usdcContract = await ethers.getContractAt("MockERC20", USDC_ADDRESS);
 
-    // Setup whale accounts for testing
+    // Setup whale accounts for testing  
     const wethWhale = "0x8EB8a3b98659Cce290402893d0123abb75E3ab28";
-    const usdcWhale = "0x55FE002aefF02F77364de339a1292923A15844B8";
+    const usdcWhale = "0x28C6c06298d514Db089934071355E5743bf21d60"; // Binance 14 (massive USDC balance)
 
-    // Impersonate whale accounts and transfer funds
+    // Impersonate whale accounts and add ETH for gas
     await ethers.provider.send("hardhat_impersonateAccount", [wethWhale]);
     await ethers.provider.send("hardhat_impersonateAccount", [usdcWhale]);
+
+    // Add ETH to whale accounts for gas fees
+    await ethers.provider.send("hardhat_setBalance", [wethWhale, "0x1000000000000000000"]); // 1 ETH
+    await ethers.provider.send("hardhat_setBalance", [usdcWhale, "0x1000000000000000000"]); // 1 ETH
 
     const wethWhaleSigner = await ethers.getSigner(wethWhale);
     const usdcWhaleSigner = await ethers.getSigner(usdcWhale);
 
-    // Transfer WETH to maker and USDC to taker
-    await wethContract.connect(wethWhaleSigner).transfer(maker.address, ethers.parseEther("100"));
-    await usdcContract.connect(usdcWhaleSigner).transfer(taker.address, ethers.parseUnits("500000", 6));
+    // Transfer smaller amounts to be extra safe with balances
+    await wethContract.connect(wethWhaleSigner).transfer(maker.address, ethers.parseEther("20"));
+    await usdcContract.connect(usdcWhaleSigner).transfer(taker.address, ethers.parseUnits("50000", 6));
 
     // Approve router to spend tokens
-    await wethContract.connect(maker).approve(AGGREGATION_ROUTER_V6, ethers.parseEther("100"));
-    await usdcContract.connect(taker).approve(AGGREGATION_ROUTER_V6, ethers.parseUnits("500000", 6));
+    await wethContract.connect(maker).approve(AGGREGATION_ROUTER_V6, ethers.parseEther("20"));
+    await usdcContract.connect(taker).approve(AGGREGATION_ROUTER_V6, ethers.parseUnits("50000", 6));
 
     console.log("Test setup completed:");
     console.log(`  Maker WETH: ${formatBalance(await wethContract.balanceOf(maker.address), 18, 'WETH')}`);
@@ -81,7 +85,7 @@ describe("ZK Order Filling", function () {
 
   describe("Basic Fill Functionality", function () {
     it("should fill a ZK order successfully with extension processing", async function () {
-      console.log("\n🎯 Testing basic ZK order fill with extension processing...\n");
+      console.log("\nTesting basic ZK order fill with extension processing...\n");
 
       // Step 1: Create and prepare ZK order
       const params: ZKOrderParams = {
@@ -95,17 +99,31 @@ describe("ZK Order Filling", function () {
           secretAmount: ethers.parseEther("2"), // 2 WETH minimum
           nonce: BigInt("123456789")
         },
+        zkConfig: {
+          customNonce: BigInt("123456789") // Ensure deterministic nonce for testing
+        },
         zkPredicateAddress,
         routerInterface
       };
 
       const zkOrder = await buildZKOrder(params);
+      console.log(`ZK Order built successfully:`, {
+        extensionLength: zkOrder.order.extension?.length || 0,
+        saltHex: `0x${zkOrder.order.salt.toString(16)}`,
+        debugInfo: zkOrder.debugInfo
+      });
+      
       const lifecycle = await processZKOrderLifecycle(zkOrder.order, maker);
+      
+      console.log(`Lifecycle status: ${lifecycle.status}`);
+      if (lifecycle.status === 'invalid') {
+        console.log(`Validation failed:`, lifecycle.validation);
+      }
 
       expect(lifecycle.status).to.equal('ready_to_fill');
       expect(lifecycle.signature).to.not.be.undefined;
 
-      console.log("✅ ZK order created and ready for fill");
+      console.log("ZK order created and ready for fill");
       console.log(`   Order: ${formatBalance(zkOrder.order.makingAmount, 18, 'WETH')} → ${formatBalance(zkOrder.order.takingAmount, 6, 'USDC')}`);
       console.log(`   Extension: ${zkOrder.order.extension?.length || 0} bytes`);
 
@@ -115,7 +133,7 @@ describe("ZK Order Filling", function () {
       const takerWethBefore = await wethContract.balanceOf(taker.address);
       const takerUsdcBefore = await usdcContract.balanceOf(taker.address);
 
-      console.log("\n📊 Balances before fill:");
+      console.log("\nBalances before fill:");
       console.log(`   Maker: ${formatBalance(makerWethBefore, 18, 'WETH')}, ${formatBalance(makerUsdcBefore, 6, 'USDC')}`);
       console.log(`   Taker: ${formatBalance(takerWethBefore, 18, 'WETH')}, ${formatBalance(takerUsdcBefore, 6, 'USDC')}`);
 
@@ -123,7 +141,7 @@ describe("ZK Order Filling", function () {
       const fillAmount = zkOrder.order.takingAmount; // Full fill
       
       // Debug: Log order structure and extension details
-      console.log("\n🔍 Debug: Order structure before fill:");
+      console.log("\nDebug: Order structure before fill:");
       console.log(`   Salt: ${zkOrder.order.salt.toString()}`);
       console.log(`   MakerTraits: ${zkOrder.order.makerTraits.toString()}`);
       console.log(`   Extension present: ${!!zkOrder.order.extension}`);
@@ -145,7 +163,7 @@ describe("ZK Order Filling", function () {
       expect(fillResult.gasUsed).to.be.greaterThan(0);
       expect(fillResult.balanceChanges).to.not.be.undefined;
 
-      console.log("\n✅ ZK order filled successfully!");
+      console.log("\nZK order filled successfully!");
       console.log(`   Transaction: ${fillResult.txHash}`);
       console.log(`   Gas used: ${fillResult.gasUsed?.toLocaleString()}`);
 
@@ -155,7 +173,7 @@ describe("ZK Order Filling", function () {
       const takerWethAfter = await wethContract.balanceOf(taker.address);
       const takerUsdcAfter = await usdcContract.balanceOf(taker.address);
 
-      console.log("\n📊 Balances after fill:");
+      console.log("\nBalances after fill:");
       console.log(`   Maker: ${formatBalance(makerWethAfter, 18, 'WETH')}, ${formatBalance(makerUsdcAfter, 6, 'USDC')}`);
       console.log(`   Taker: ${formatBalance(takerWethAfter, 18, 'WETH')}, ${formatBalance(takerUsdcAfter, 6, 'USDC')}`);
 
@@ -176,7 +194,7 @@ describe("ZK Order Filling", function () {
     });
 
     it("should handle partial fills correctly", async function () {
-      console.log("\n🎯 Testing partial ZK order fill...\n");
+      console.log("\nTesting partial ZK order fill...\n");
 
       // Create another ZK order for partial fill test
       const params: ZKOrderParams = {
@@ -201,7 +219,7 @@ describe("ZK Order Filling", function () {
       const partialFillAmount = zkOrder.order.takingAmount / 2n; // 17,500 USDC
       const expectedMakingAmount = zkOrder.order.makingAmount / 2n; // 5 WETH
 
-      console.log(`📋 Partial fill: ${formatBalance(partialFillAmount, 6, 'USDC')} of ${formatBalance(zkOrder.order.takingAmount, 6, 'USDC')}`);
+      console.log(`Partial fill: ${formatBalance(partialFillAmount, 6, 'USDC')} of ${formatBalance(zkOrder.order.takingAmount, 6, 'USDC')}`);
 
       const fillResult = await fillZKOrder(
         lifecycle,
@@ -220,7 +238,7 @@ describe("ZK Order Filling", function () {
       expect(changes.takerMakingAssetDelta).to.equal(expectedMakingAmount);
       expect(changes.takerTakingAssetDelta).to.equal(-partialFillAmount);
 
-      console.log("✅ Partial fill completed successfully!");
+      console.log("Partial fill completed successfully!");
     });
   });
 
@@ -254,7 +272,7 @@ describe("ZK Order Filling", function () {
       );
 
       expect(estimatedGas).to.be.greaterThan(0);
-      console.log(`⛽ Estimated gas for ZK fill: ${estimatedGas.toLocaleString()}`);
+      console.log(`Estimated gas for ZK fill: ${estimatedGas.toLocaleString()}`);
 
       // Verify estimation is reasonable (should be higher than basic transfers)
       expect(estimatedGas).to.be.greaterThan(BigInt(200000)); // Higher than basic transfers
@@ -292,7 +310,7 @@ describe("ZK Order Filling", function () {
 
       expect(validValidation.canFill).to.be.true;
       expect(validValidation.errors).to.be.empty;
-      console.log("✅ Valid order passed validation");
+      console.log("Valid order passed validation");
 
       // Test validation with excessive fill amount
       const excessiveAmountValidation = validateZKOrderForFill(
@@ -303,7 +321,7 @@ describe("ZK Order Filling", function () {
 
       expect(excessiveAmountValidation.canFill).to.be.true; // Still can fill (partial)
       expect(excessiveAmountValidation.warnings.join(' ')).to.match(/exceeds order taking amount/);
-      console.log("✅ Excessive amount validation working");
+      console.log("Excessive amount validation working");
 
       // Test validation with zero amount
       const zeroAmountValidation = validateZKOrderForFill(
@@ -314,7 +332,7 @@ describe("ZK Order Filling", function () {
 
       expect(zeroAmountValidation.canFill).to.be.false;
       expect(zeroAmountValidation.errors.join(' ')).to.match(/greater than zero/);
-      console.log("✅ Zero amount validation working");
+      console.log("Zero amount validation working");
 
       // Test validation with same maker/taker
       const sameMakerTakerValidation = validateZKOrderForFill(
@@ -325,7 +343,7 @@ describe("ZK Order Filling", function () {
 
       expect(sameMakerTakerValidation.canFill).to.be.true; // Technically allowed
       expect(sameMakerTakerValidation.warnings.join(' ')).to.match(/same address/);
-      console.log("✅ Same maker/taker validation working");
+      console.log("Same maker/taker validation working");
     });
   });
 
@@ -365,7 +383,7 @@ describe("ZK Order Filling", function () {
 
       expect(fillResult.success).to.be.false;
       expect(fillResult.error).to.include('status is \'created\'');
-      console.log("✅ Invalid lifecycle state properly rejected");
+      console.log("Invalid lifecycle state properly rejected");
     });
 
     it("should handle missing extension data", async function () {
@@ -400,7 +418,7 @@ describe("ZK Order Filling", function () {
 
       expect(fillResult.success).to.be.false;
       expect(fillResult.error).to.include('missing required extension data');
-      console.log("✅ Missing extension data properly rejected");
+      console.log("Missing extension data properly rejected");
     });
   });
 
@@ -443,13 +461,13 @@ describe("ZK Order Filling", function () {
 
       expect(fillResult.success).to.be.true;
       expect(fillResult.gasUsed).to.be.lessThanOrEqual(config.gasLimit!);
-      console.log("✅ Custom configuration applied successfully");
+      console.log("Custom configuration applied successfully");
     });
   });
 
   describe("Simple ZK Extension Test", function () {
     it("should test direct ZK predicate call without arbitraryStaticCall wrapper", async function () {
-      console.log("\n🔧 Testing direct ZK predicate call (bypassing complex extension builder)...\n");
+      console.log("\nTesting direct ZK predicate call (bypassing complex extension builder)...\n");
 
       // Step 1: Build a simple ZK order manually using the working predicate pattern
       const params: ZKOrderParams = {
@@ -554,13 +572,13 @@ describe("ZK Order Filling", function () {
         );
 
         const receipt = await fillTx.wait();
-        console.log(`✅ Simple ZK predicate fill succeeded! Gas: ${receipt.gasUsed.toLocaleString()}`);
+        console.log(`Simple ZK predicate fill succeeded! Gas: ${receipt.gasUsed.toLocaleString()}`);
         
         // Basic verification
         expect(receipt.status).to.equal(1);
         
       } catch (error: any) {
-        console.log(`❌ Simple ZK predicate fill failed: ${error.message}`);
+        console.log(`Simple ZK predicate fill failed: ${error.message}`);
         if (error.data) {
           console.log(`   Error data: ${error.data}`);
         }

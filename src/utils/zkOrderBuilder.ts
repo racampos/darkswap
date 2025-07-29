@@ -219,7 +219,8 @@ export async function buildZKOrder(params: ZKOrderParams): Promise<ZKOrderBuildR
     console.warn(`ZK Order Builder warnings: ${validation.warnings.join(', ')}`);
   }
   
-  // Step 1: Generate nonce and calculate commitment
+  // Step 1: Generate nonce and calculate commitment using our JavaScript Poseidon
+  // This matches our circuit implementation and avoids contract method mismatch
   const nonce = params.zkConfig?.customNonce || generateNonce();
   const commitment = calculateCommitment(
     params.secretParams.secretPrice,
@@ -227,7 +228,7 @@ export async function buildZKOrder(params: ZKOrderParams): Promise<ZKOrderBuildR
     nonce
   );
   
-  // Step 2: Prepare ZK proof inputs (we'll generate the actual proof)
+  // Step 3: Prepare ZK proof inputs (we'll generate the actual proof)
   const proofInputs: ZKProofInputs = {
     secretPrice: params.secretParams.secretPrice.toString(),
     secretAmount: params.secretParams.secretAmount.toString(),
@@ -238,7 +239,7 @@ export async function buildZKOrder(params: ZKOrderParams): Promise<ZKOrderBuildR
     offeredAmount: params.makingAmount.toString()
   };
   
-  // Step 3: Generate ZK proof
+  // Step 4: Generate ZK proof
   const { proof, publicSignals } = await generateProof(
     proofInputs,
     {
@@ -247,26 +248,28 @@ export async function buildZKOrder(params: ZKOrderParams): Promise<ZKOrderBuildR
     }
   );
   
-  // Step 3.5: Encode using the correct format for our predicate contract
+  // Step 5: Encode using our utility (TODO: Use contract method for perfect compatibility)
   const { encodedData: proofData } = await import('./zkProofEncoder').then(module => 
     module.encodeZKProofData(proof, publicSignals)
   );
   
-  // Step 4: Build ZK extension
-  const completeExtension = createCompleteZKExtension(
-    params.routerInterface,
+  // Step 4: Build extension using SIMPLIFIED approach that matches working debug test
+  const predicateInterface = new ethers.Interface(["function predicate(bytes calldata data) external view returns (uint256)"]);
+  const predicateCalldata = predicateInterface.encodeFunctionData("predicate", [proofData]);
+  const arbitraryCall = params.routerInterface.encodeFunctionData("arbitraryStaticCall", [
     params.zkPredicateAddress,
-    proofData,
-    {
-      existingPredicates: params.zkConfig?.additionalPredicates,
-      gasLimit: params.zkConfig?.gasLimit
-    }
-  );
+    predicateCalldata
+  ]);
   
-  // Step 5: Pack commitment and extension hash into salt
-  const saltData = packSalt(commitment, completeExtension.saltPackingHash);
+  // Wrap arbitraryStaticCall in gt() like working debug test
+  const predicate = params.routerInterface.encodeFunctionData("gt", [
+    0, // Check if result > 0 (i.e., equals 1)
+    arbitraryCall
+  ]);
   
-  // Step 6: Build the actual order using existing patterns but preserve our custom salt
+
+  
+  // Step 5: Build makerTraits
   const makerTraits = buildMakerTraits({
     allowPartialFill: params.makerTraits?.allowPartialFill ?? true,
     allowMultipleFills: params.makerTraits?.allowMultipleFills ?? true,
@@ -275,57 +278,35 @@ export async function buildZKOrder(params: ZKOrderParams): Promise<ZKOrderBuildR
     nonce: params.makerTraits?.nonce ? Number(params.makerTraits.nonce) : undefined,
     series: params.makerTraits?.series ? Number(params.makerTraits.series) : undefined
   });
-
-  // Build order WITHOUT extension first to get the base structure, then manually add our salt
-  const baseOrderWithoutExtension: OrderStruct = buildOrder({
+  
+  // Step 6: Build order with extension using SINGLE buildOrder call (like debug test)
+  const order = buildOrder({
     maker: params.maker,
     makerAsset: params.makerAsset,
     takerAsset: params.takerAsset,
     makingAmount: params.makingAmount,
     takingAmount: params.takingAmount,
-    makerTraits: makerTraits,
-    salt: saltData.salt // This will be overridden, but we'll fix it
+    makerTraits: makerTraits
   }, {
-    // Empty extension fields to prevent salt override
-    makerAssetSuffix: '0x',
-    takerAssetSuffix: '0x',
-    makingAmountData: '0x',
-    takingAmountData: '0x',
-    predicate: '0x', // Don't put ZK extension here yet
-    permit: '0x',
-    preInteraction: '0x',
-    postInteraction: '0x'
+    predicate: predicate
   });
   
-  // Now manually create the final order with our packed salt and ZK extension
-  const baseOrder: OrderStruct = {
-    ...baseOrderWithoutExtension,
-    salt: saltData.salt, // Override with our packed salt
-    makerTraits: BigInt(baseOrderWithoutExtension.makerTraits) | (1n << 249n) // Set HAS_EXTENSION flag manually
+  // Step 7: Pack commitment into salt using same approach as debug test
+  const extensionHash = ethers.keccak256(predicate);
+  const extensionHashBigInt = BigInt(extensionHash);
+  const commitHashTruncated = commitment & ((1n << 96n) - 1n); // Truncate to 96 bits
+  const commitHashShifted = commitHashTruncated << 160n;
+  const extensionHashLower = extensionHashBigInt & ((1n << 160n) - 1n);
+  order.salt = commitHashShifted | extensionHashLower;
+  
+  // Create salt data for metadata (using the same structure for compatibility)
+  const saltData = {
+    salt: order.salt,
+    commitment: commitHashTruncated,
+    extensionHash: extensionHashLower  // Use the same truncated value as in salt
   };
   
-  // Build the final order with ZK extension - we need to manually construct the extension field
-  const finalOrder: OrderStruct = buildOrder({
-    maker: params.maker,
-    makerAsset: params.makerAsset,
-    takerAsset: params.takerAsset,
-    makingAmount: params.makingAmount,
-    takingAmount: params.takingAmount,
-    makerTraits: '0x' + baseOrder.makerTraits.toString(16), // Convert bigint to hex string
-    salt: baseOrder.salt // Keep our packed salt
-  }, {
-    makerAssetSuffix: '0x',
-    takerAssetSuffix: '0x',
-    makingAmountData: '0x',
-    takingAmountData: '0x',
-    predicate: completeExtension.extensionData.extensionBytes, // Now add ZK extension
-    permit: '0x',
-    preInteraction: '0x',
-    postInteraction: '0x'
-  });
-  
-  // Override the salt one more time to ensure it's preserved
-  finalOrder.salt = saltData.salt;
+  const finalOrder = order;
   
   // Create the ZK-enabled order with metadata
   const zkOrder: ZKEnabledOrder = {
@@ -334,7 +315,12 @@ export async function buildZKOrder(params: ZKOrderParams): Promise<ZKOrderBuildR
       commitment: commitment,
       nonce: nonce,
       secretParams: params.secretParams,
-      extensionData: completeExtension.extensionData,
+      extensionData: {
+        extensionBytes: predicate,
+        extensionHash: extensionHashLower, // Use same truncated value as in salt
+        predicateCall: arbitraryCall,
+        gasEstimate: 80000 // Simplified gas estimate
+      },
       saltData: saltData,
       proofInputs: proofInputs
     }
@@ -344,8 +330,8 @@ export async function buildZKOrder(params: ZKOrderParams): Promise<ZKOrderBuildR
   const debugInfo = {
     commitmentHex: `0x${commitment.toString(16)}`,
     saltHex: `0x${saltData.salt.toString(16)}`,
-    extensionLength: (completeExtension.extensionData.extensionBytes.length - 2) / 2,
-    totalGasEstimate: completeExtension.extensionData.gasEstimate
+    extensionLength: (predicate.length - 2) / 2,
+    totalGasEstimate: 80000 // Simplified gas estimate
   };
   
   return {
