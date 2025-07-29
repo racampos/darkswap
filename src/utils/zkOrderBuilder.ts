@@ -16,34 +16,36 @@
 import { ethers } from "ethers";
 import { Interface } from "ethers";
 import path from "path";
-import { 
-  calculateCommitment, 
-  generateNonce, 
-  type CommitmentData, 
-  type SecretParameters 
+import {
+  calculateCommitment,
+  generateNonce,
+  type CommitmentData,
+  type SecretParameters
 } from "./commitmentUtils";
-import { 
-  packSalt, 
-  createSaltFromExtension, 
+import {
+  packSalt,
+  createSaltFromExtension,
   unpackSalt,
   truncateCommitment,
-  type PackedSaltData 
+  type PackedSaltData
 } from "./saltPacking";
-import { 
-  buildZKExtension, 
-  createCompleteZKExtension, 
-  type ZKExtensionData 
+import {
+  buildZKExtension,
+  createCompleteZKExtension,
+  type ZKExtensionData
 } from "./zkExtensionBuilder";
-import { 
-  generateFormattedProof 
+import {
+  generateFormattedProof,
+  generateProof
 } from "./proofGenerator";
-import { 
-  type ZKProofInputs 
+import {
+  type ZKProofInputs,
+  type PublicSignals
 } from "../types/zkTypes";
-import { 
-  buildOrder, 
-  buildMakerTraits, 
-  type OrderStruct 
+import {
+  buildOrder,
+  buildMakerTraits,
+  type OrderStruct
 } from "../../test/helpers/orderUtils";
 
 // Default circuit paths
@@ -237,12 +239,17 @@ export async function buildZKOrder(params: ZKOrderParams): Promise<ZKOrderBuildR
   };
   
   // Step 3: Generate ZK proof
-  const { encodedData: proofData } = await generateFormattedProof(
+  const { proof, publicSignals } = await generateProof(
     proofInputs,
     {
       wasmPath: params.zkConfig?.wasmPath || DEFAULT_WASM_PATH,
       zkeyPath: params.zkConfig?.zkeyPath || DEFAULT_ZKEY_PATH
     }
+  );
+  
+  // Step 3.5: Encode using the correct format for our predicate contract
+  const { encodedData: proofData } = await import('./zkProofEncoder').then(module => 
+    module.encodeZKProofData(proof, publicSignals)
   );
   
   // Step 4: Build ZK extension

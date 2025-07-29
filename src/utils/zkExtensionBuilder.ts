@@ -146,10 +146,14 @@ export function buildZKExtension(
   // Build the predicate call using the router's arbitraryStaticCall function
   // This creates: arbitraryStaticCall(predicateAddress, abi.encodeCall(predicate, zkProofData))
   const predicateCalldata = ZK_EXTENSION_CONFIG.PREDICATE_SELECTOR + zkProofData.slice(2); // Remove 0x from proof data
-  const predicateCall = createArbitraryStaticCall(routerInterface, predicateAddress, predicateCalldata);
+  const arbitraryCall = createArbitraryStaticCall(routerInterface, predicateAddress, predicateCalldata);
   
-  // For a single predicate, the extension is just the predicate call
-  const extensionBytes = predicateCall;
+  // 🔑 CRITICAL FIX: Wrap arbitraryStaticCall in gt() to check if result > 0
+  // This follows the working example pattern and ensures 1inch protocol compatibility
+  const extensionBytes = routerInterface.encodeFunctionData("gt", [
+    0, // Check if result > 0 (our predicate returns 1 for success)
+    arbitraryCall
+  ]);
   
   // Compute extension hash for salt packing
   const extensionHash = computeExtensionHash(extensionBytes);
@@ -160,7 +164,7 @@ export function buildZKExtension(
   return {
     extensionBytes,
     extensionHash,
-    predicateCall,
+    predicateCall: arbitraryCall, // Store the inner call for reference
     gasEstimate
   };
 }

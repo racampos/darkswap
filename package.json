@@ -31,6 +31,8 @@
     "test:zk-order-signing": "npx hardhat test test/ZKOrderSigning.test.ts",
     "test:zk-order-lifecycle": "npx hardhat test test/ZKOrderLifecycle.test.ts",
     "test:zk-order-validation": "npx hardhat test test/ZKOrderSigning.test.ts --grep 'Validation|Lifecycle'",
+    "test:zk-fill-basic": "npx hardhat test test/ZKOrderFilling.test.ts",
+    "test:zk-fill-success": "npx hardhat test test/ZKOrderFilling.test.ts --grep 'Basic Fill Functionality'",
     "test:proof-generation": "node scripts/generateProof.js",
     "test:proof-format": "npm run test:proof-generation",
     "circuit:version": "circom --version && snarkjs --version",
