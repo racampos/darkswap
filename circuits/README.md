@@ -32,11 +32,11 @@ The circuit enables **cryptographic enforcement of hidden price/amount threshold
 
 ## Implementation
 
-✅ **Production-ready circuit** with **133 cryptographic constraints**  
-✅ **Circomlib-based range checking** for reliable inequality verification  
-✅ **Complete trusted setup** with ceremony artifacts  
-✅ **On-chain verification working** with proper G2 coordinate formatting  
-✅ **Full test coverage** with constraint enforcement validation
+**Production-ready circuit** with **133 cryptographic constraints**  
+**Circomlib-based range checking** for reliable inequality verification  
+**Complete trusted setup** with ceremony artifacts  
+**On-chain verification working** with proper G2 coordinate formatting  
+**Full test coverage** with constraint enforcement validation
 
 ## Directory Structure
 
@@ -106,11 +106,11 @@ npm run circuit:verify
 
 **Circuit Statistics:**
 
-- 🔧 **Wires**: 136
-- 🔒 **Constraints**: 133 (production-grade enforcement)
-- 📥 **Private Inputs**: 2 (`secretPrice`, `secretAmount`)
-- 📤 **Public Inputs**: 4 (`commit`, `nonce`, `offeredPrice`, `offeredAmount`)
-- ✅ **Outputs**: 1 (`valid`)
+- **Wires**: 136
+- **Constraints**: 133 (production-grade enforcement)
+- **Private Inputs**: 2 (`secretPrice`, `secretAmount`)
+- **Public Inputs**: 4 (`commit`, `nonce`, `offeredPrice`, `offeredAmount`)
+- **Outputs**: 1 (`valid`)
 
 **Cryptographic Security:**
 
@@ -121,22 +121,22 @@ npm run circuit:verify
 
 ## Security Notes
 
-⚠️ **Trusted Setup**: The circuit requires a trusted setup ceremony. The setup artifacts in this repository are for **development/testing only**. Production deployments require a secure multi-party computation ceremony.
+**Trusted Setup**: The circuit requires a trusted setup ceremony. The setup artifacts in this repository are for **development/testing only**. Production deployments require a secure multi-party computation ceremony.
 
-🔐 **Commitment Scheme**: Uses simple additive commitment (`secretPrice + secretAmount + nonce`). Production deployments should consider more sophisticated commitment schemes.
+**Commitment Scheme**: Uses simple additive commitment (`secretPrice + secretAmount + nonce`). Production deployments should consider more sophisticated commitment schemes.
 
-🎯 **Constraint Verification**: All 133 constraints are cryptographically enforced. Invalid inputs cannot produce valid proofs.
+**Constraint Verification**: All 133 constraints are cryptographically enforced. Invalid inputs cannot produce valid proofs.
 
 ## Next Steps
 
 **Integration Ready:** The circuit is complete and ready for integration with:
 
-- 🔄 **LOP Predicate Adapters**: Custom Solidity contracts that decode proof bytes
-- 🧩 **Order Salt Packing**: Embedding commitments in order salt (upper 96 bits)
-- 🛡️ **Predicate Extensions**: On-chain verification during order execution
+- **LOP Predicate Adapters**: Custom Solidity contracts that decode proof bytes
+- **Order Salt Packing**: Embedding commitments in order salt (upper 96 bits)
+- **Predicate Extensions**: On-chain verification during order execution
 
 **Performance:** Current setup supports proofs in ~500ms with verification in ~2ms on-chain.
 
 ---
 
-**Status: ✅ Complete** - All tests passing, constraint enforcement working, on-chain verification successful.
+**Status: Complete** - All tests passing, constraint enforcement working, on-chain verification successful.
