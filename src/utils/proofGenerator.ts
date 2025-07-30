@@ -159,28 +159,28 @@ export function formatProofForContract(
 }
 
 /**
- * ABI-encodes proof data for contract calls
+ * Encodes formatted proof data for contract consumption
  */
 export function encodeProofData(proofData: ZKProofData): string {
-  // Define the ZKProofData struct ABI
+  // Contract expects: (uint256[2] pi_a, uint256[2][2] pi_b, uint256[2] pi_c, uint256[5] publicSignals)
   const abiTypes = [
-    'uint256', // commit
-    'uint256', // nonce
-    'uint256', // offeredPrice
-    'uint256', // offeredAmount
-    'uint256[2]', // a
-    'uint256[2][2]', // b
-    'uint256[2]' // c
+    'uint256[2]', // pi_a
+    'uint256[2][2]', // pi_b  
+    'uint256[2]', // pi_c
+    'uint256[5]' // publicSignals [valid=1, commit, nonce, offeredPrice, offeredAmount]
   ];
   
   const values = [
-    proofData.commit,
-    proofData.nonce,
-    proofData.offeredPrice,
-    proofData.offeredAmount,
-    proofData.a,
-    proofData.b,
-    proofData.c
+    proofData.a, // [uint256, uint256]
+    proofData.b, // [[uint256, uint256], [uint256, uint256]]
+    proofData.c, // [uint256, uint256]
+    [
+      1, // valid flag (always 1 for successfully generated proofs)
+      proofData.commit,
+      proofData.nonce,
+      proofData.offeredPrice,
+      proofData.offeredAmount
+    ]
   ];
   
   return ethers.AbiCoder.defaultAbiCoder().encode(abiTypes, values);
