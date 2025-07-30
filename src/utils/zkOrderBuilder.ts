@@ -304,27 +304,53 @@ export async function buildZKOrder(params: ZKOrderParams): Promise<ZKOrderBuildR
   console.log(`   Extension length: ${(order as any).extension?.length || 0} chars`);
   console.log(`   Salt: 0x${order.salt.toString(16)}`);
 
-  // Step 5: Return in expected format but with simple metadata
-  return {
-    order: order,
-    zkMetadata: {
-      commitment: commitment,
-      nonce: nonce,
-      secretParams: params.secretParams,
-      extensionData: {
-        extensionBytes: zkWrappedPredicate,
-        extensionHash: BigInt(keccak256(zkWrappedPredicate)),
-        predicateCall: zkPredicateCall,
-        gasEstimate: 80000
-      }
-    },
-    debugInfo: {
-      commitmentHex: `0x${commitment.toString(16)}`,
-      saltHex: `0x${order.salt.toString(16)}`,
-      extensionLength: zkWrappedPredicate.length,
-      totalGasEstimate: 80000
-    }
-  };
+           // Step 5: Create ZKEnabledOrder with metadata
+         const extensionHash = BigInt(keccak256(zkWrappedPredicate));
+         const zkEnabledOrder: ZKEnabledOrder = {
+           ...order,
+           zkMetadata: {
+             commitment: commitment,
+             nonce: nonce,
+             secretParams: params.secretParams,
+             proofInputs: {
+               secretPrice: params.secretParams.secretPrice.toString(),
+               secretAmount: params.secretParams.secretAmount.toString(),
+               nonce: nonce.toString(),
+               offeredPrice: (params.takingAmount * BigInt(1e18) / params.makingAmount).toString(),
+               offeredAmount: params.makingAmount.toString(),
+               commit: commitment.toString()
+             },
+             extensionData: {
+               extensionBytes: zkWrappedPredicate,
+               extensionHash: extensionHash,
+               predicateCall: zkPredicateCall,
+               gasEstimate: 80000
+             },
+             saltData: {
+               salt: order.salt,
+               commitment: commitment,
+               extensionHash: extensionHash
+             }
+           }
+         };
+
+         // Step 6: Return in ZKOrderBuildResult format
+         return {
+           order: zkEnabledOrder,
+           proofData: zkProofData,
+           validationResult: {
+             isValid: true,
+             errors: [],
+             warnings: [],
+             gasEstimate: 80000
+           },
+           debugInfo: {
+             commitmentHex: `0x${commitment.toString(16)}`,
+             saltHex: `0x${order.salt.toString(16)}`,
+             extensionLength: zkWrappedPredicate.length,
+             totalGasEstimate: 80000
+           }
+         };
 }
 
 /**
@@ -339,7 +365,7 @@ export async function buildZKOrderDirect(params: {
   takingAmount: bigint;
   zkPredicateAddress: string;
   zkProofData: string;
-  routerInterface: ethers.Interface;
+  routerInterface: Interface;
   salt?: bigint;
 }): Promise<OrderStruct> {
   console.log("\n🔨 Building ZK order using DIRECT working pattern...");
