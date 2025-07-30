@@ -35,6 +35,8 @@
     "test:zk-fill-success": "npx hardhat test test/ZKOrderFilling.test.ts --grep 'Basic Fill Functionality'",
     "test:zk-taker-utils": "npx hardhat test test/ZKTakerUtils.test.ts",
     "test:zk-fill-validation": "npx hardhat test test/ZKTakerUtils.test.ts --grep 'validateZKOrderForTaker|canFillZKOrder|validateFillParameters'",
+    "test:zk-lifecycle": "npx hardhat test test/ZKOrderLifecycle.test.ts",
+    "test:zk-e2e": "npx hardhat test test/ZKOrderLifecycle.test.ts",
     "test:proof-generation": "node scripts/generateProof.js",
     "test:proof-format": "npm run test:proof-generation",
     "circuit:version": "circom --version && snarkjs --version",
