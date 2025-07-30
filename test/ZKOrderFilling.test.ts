@@ -83,6 +83,17 @@ describe("ZK Order System - Demo Ready", function () {
     // Transfer tokens to test accounts
     await wethContract.connect(wethWhaleSigner).transfer(maker.address, ethers.parseEther("20"));
     await usdcContract.connect(usdcWhaleSigner).transfer(taker.address, "50000000000");
+
+    // Approve router to spend tokens (THIS WAS MISSING!)
+    await wethContract.connect(maker).approve(
+      AGGREGATION_ROUTER_V6,
+      ethers.MaxUint256
+    );
+    
+    await usdcContract.connect(taker).approve(
+      AGGREGATION_ROUTER_V6,
+      ethers.MaxUint256
+    );
   }
 
   after(async function () {
@@ -637,11 +648,7 @@ describe("ZK Order System - Demo Ready", function () {
       }
 
       // Check balances and nonces
-      console.log("\nAccount state:");
-      const makerNonce = await ethers.provider.getTransactionCount(maker.address);
-      const takerNonce = await ethers.provider.getTransactionCount(taker.address);
-      console.log(`   Maker nonce: ${makerNonce}`);
-      console.log(`   Taker nonce: ${takerNonce}`);
+      console.log(`Account state:\n   Maker nonce: ${await ethers.provider.getTransactionCount(maker.address)}\n   Taker nonce: ${await ethers.provider.getTransactionCount(taker.address)}`);
     });
   });
 }); 

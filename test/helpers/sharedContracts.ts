@@ -38,7 +38,7 @@ export async function getSharedZKContracts(): Promise<SharedContracts> {
     return sharedContracts;
   }
 
-  console.log("🏗️  Deploying shared ZK contracts...");
+  console.log("Deploying shared ZK contracts...");
   
   const [deployer] = await ethers.getSigners();
 
@@ -61,7 +61,7 @@ export async function getSharedZKContracts(): Promise<SharedContracts> {
     zkPredicateAddress
   };
 
-  console.log("✅ Shared ZK contracts deployed:");
+  console.log("Shared ZK contracts deployed:");
   console.log(`   Groth16Verifier: ${await groth16Verifier.getAddress()}`);
   console.log(`   HiddenParamPredicate: ${zkPredicateAddress}`);
 
@@ -77,7 +77,7 @@ export async function getSharedZKProof(): Promise<SharedZKProof> {
     return sharedProof;
   }
 
-  console.log("🔐 Generating shared ZK proof...");
+  console.log("Generating shared ZK proof...");
 
   // Standard test parameters (same as used in both tests)
   const SECRET_PRICE = 3200000000n;
@@ -119,7 +119,7 @@ export async function getSharedZKProof(): Promise<SharedZKProof> {
     nonce: NONCE
   };
 
-  console.log("✅ Shared ZK proof generated");
+  console.log("Shared ZK proof generated");
 
   return sharedProof;
 }

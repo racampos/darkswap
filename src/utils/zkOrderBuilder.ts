@@ -210,7 +210,7 @@ export function validateZKOrderParams(params: ZKOrderParams): ZKOrderValidationR
  * This replaces the complex workflow with the PredicateExtensions approach that works
  */
 export async function buildZKOrder(params: ZKOrderParams): Promise<ZKOrderBuildResult> {
-  console.log("\n🔨 Building ZK order using PROVEN SIMPLE pattern...");
+  console.log("\nBuilding ZK order using PROVEN SIMPLE pattern...");
 
   // Step 1: Get or generate ZK proof
   let zkProofData: string;
@@ -222,7 +222,7 @@ export async function buildZKOrder(params: ZKOrderParams): Promise<ZKOrderBuildR
     zkProofData = preGenerated.encodedData;
     commitment = preGenerated.commitment;
     nonce = BigInt("123456789"); // Fixed nonce for testing
-    console.log("✅ Using pre-generated proof for deterministic testing");
+    console.log("Using pre-generated proof for deterministic testing");
   } else {
     // Generate proof normally
     nonce = params.zkConfig?.customNonce ?? BigInt(Math.floor(Math.random() * 1000000));
@@ -251,7 +251,7 @@ export async function buildZKOrder(params: ZKOrderParams): Promise<ZKOrderBuildR
       module.encodeZKProofData(proof, publicSignals)
     );
     zkProofData = encodedData;
-    console.log("✅ ZK proof generated successfully");
+    console.log("ZK proof generated successfully");
   }
 
   // Step 2: Build ZK predicate using EXACT PredicateExtensions pattern
@@ -261,7 +261,7 @@ export async function buildZKOrder(params: ZKOrderParams): Promise<ZKOrderBuildR
     predicateInterface.encodeFunctionData("predicate", [zkProofData])
   ]);
 
-  console.log(`✅ ZK arbitraryStaticCall created (${zkPredicateCall.length} chars)`);
+  console.log(`ZK arbitraryStaticCall created (${zkPredicateCall.length} chars)`);
 
   // Step 3: Wrap in gt() exactly like PredicateExtensions does
   const zkWrappedPredicate = params.routerInterface.encodeFunctionData("gt", [
@@ -269,7 +269,7 @@ export async function buildZKOrder(params: ZKOrderParams): Promise<ZKOrderBuildR
     zkPredicateCall
   ]);
 
-  console.log(`✅ ZK wrapped predicate created (${zkWrappedPredicate.length} chars)`);
+  console.log(`ZK wrapped predicate created (${zkWrappedPredicate.length} chars)`);
 
   // Step 4: Build order using EXACT PredicateExtensions pattern
   const { buildOrder, buildMakerTraits } = await import("../../test/helpers/orderUtils");
@@ -300,7 +300,7 @@ export async function buildZKOrder(params: ZKOrderParams): Promise<ZKOrderBuildR
     postInteraction: '0x',
   });
 
-  console.log(`✅ Simple ZK order created:`);
+  console.log(`Simple ZK order created:`);
   console.log(`   Extension length: ${(order as any).extension?.length || 0} chars`);
   console.log(`   Salt: 0x${order.salt.toString(16)}`);
 
@@ -368,7 +368,7 @@ export async function buildZKOrderDirect(params: {
   routerInterface: Interface;
   salt?: bigint;
 }): Promise<OrderStruct> {
-  console.log("\n🔨 Building ZK order using DIRECT working pattern...");
+  console.log("\nBuilding ZK order using DIRECT working pattern...");
 
   // Step 1: Build ZK predicate using EXACT PredicateExtensions pattern
   // This matches line 147-156 in PredicateExtensions.test.ts
@@ -378,7 +378,7 @@ export async function buildZKOrderDirect(params: {
     new Interface(["function predicate(bytes calldata data) external view returns (uint256)"]).encodeFunctionData("predicate", [params.zkProofData])
   ]);
 
-  console.log(`✅ ZK arbitraryStaticCall created (${zkPredicateCall.length} chars)`);
+  console.log(`ZK arbitraryStaticCall created (${zkPredicateCall.length} chars)`);
 
   // Step 2: Wrap in gt() exactly like PredicateExtensions does (line 153-156)
   const zkWrappedPredicate = params.routerInterface.encodeFunctionData("gt", [
@@ -386,7 +386,7 @@ export async function buildZKOrderDirect(params: {
     zkPredicateCall
   ]);
 
-  console.log(`✅ ZK wrapped predicate created (${zkWrappedPredicate.length} chars)`);
+  console.log(`ZK wrapped predicate created (${zkWrappedPredicate.length} chars)`);
 
   // Step 3: Build order using EXACT PredicateExtensions pattern (line 163-183)
   // Import the helpers directly
@@ -414,7 +414,7 @@ export async function buildZKOrderDirect(params: {
     postInteraction: '0x',
   });
 
-  console.log(`✅ ZK order created using direct pattern:`);
+  console.log(`ZK order created using direct pattern:`);
   console.log(`   Extension length: ${(order as any).extension?.length || 0} chars`);
   console.log(`   Salt: 0x${order.salt.toString(16)}`);
 
@@ -542,6 +542,6 @@ export function debugZKOrder(zkOrder: ZKEnabledOrder): {
     zkSummary: summary.commitmentSummary,
     saltBreakdown: `Salt(0x${zkOrder.salt.toString(16).slice(0, 16)}...) = commitment + extension hash`,
     extensionBreakdown: `Extension: ${summary.extensionLength} bytes, ~${summary.gasEstimate} gas`,
-    validationStatus: validation.isValid ? "✅ Valid" : `❌ Invalid: ${validation.errors.join(', ')}`
+    validationStatus: validation.isValid ? "Valid" : `❌ Invalid: ${validation.errors.join(', ')}`
   };
 } 
