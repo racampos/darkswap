@@ -16,9 +16,7 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { buildMakerTraits, buildTakerTraits, signOrder, buildOrder } from "./helpers/orderUtils";
-import { generateProof } from "../src/utils/proofGenerator";
-import { calculateCommitment } from "../src/utils/commitmentUtils";
-import path from "path";
+import { getSharedZKContracts, getSharedZKProof } from "./helpers/sharedContracts";
 
 describe("ZK Basic Integration - Reference Implementation", function () {
   let deployer: HardhatEthersSigner;
@@ -27,65 +25,32 @@ describe("ZK Basic Integration - Reference Implementation", function () {
   let groth16Verifier: any;
   let hiddenParamPredicate: any;
 
-  // Test parameters for ZK order
-  const SECRET_PRICE = 3200000000n; // $3200 in 6 decimals
-  const SECRET_AMOUNT = ethers.parseEther("2"); // 2 WETH minimum
-  const NONCE = 123456789n;
-  const OFFERED_PRICE = 3500000000n; // $3500 per ETH (better than secret)
-  const OFFERED_AMOUNT = ethers.parseEther("5"); // 5 WETH (more than minimum)
-
   // Mainnet addresses
   const WETH_ADDRESS = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
   const USDC_ADDRESS = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 
-  // Proof generation configuration
-  const PROOF_CONFIG = {
-    wasmPath: path.join(__dirname, "../circuits/hidden_params_js/hidden_params.wasm"),
-    zkeyPath: path.join(__dirname, "../circuits/hidden_params_0001.zkey"),
-    enableLogging: false
-  };
-
   before(async function () {
     [deployer, maker, taker] = await ethers.getSigners();
     
-    // Deploy ZK contracts
-    const Groth16VerifierFactory = await ethers.getContractFactory("Groth16Verifier");
-    groth16Verifier = await Groth16VerifierFactory.deploy();
-    await groth16Verifier.waitForDeployment();
-    
-    const HiddenParamPredicateFactory = await ethers.getContractFactory("HiddenParamPredicateZK");
-    hiddenParamPredicate = await HiddenParamPredicateFactory.deploy(await groth16Verifier.getAddress());
-    await hiddenParamPredicate.waitForDeployment();
+    // Use shared ZK contracts for consistent addresses
+    const contracts = await getSharedZKContracts();
+    groth16Verifier = contracts.groth16Verifier;
+    hiddenParamPredicate = contracts.hiddenParamPredicate;
   });
 
   it("should demonstrate working ZK order integration pattern", async function () {
-    // Step 1: Generate commitment using Poseidon hash (matches circuit)
-    const fullCommit = calculateCommitment(SECRET_PRICE, SECRET_AMOUNT, NONCE);
-    const commitHash = fullCommit & ((1n << 96n) - 1n); // Truncate to 96 bits
+    // Use shared proof for deterministic testing
+    const sharedProof = await getSharedZKProof();
+    const { encodedData: proofData, commitment, nonce } = sharedProof;
     
-    // Step 2: Generate ZK proof
-    const proofInputs = {
-      secretPrice: SECRET_PRICE.toString(),
-      secretAmount: SECRET_AMOUNT.toString(),
-      nonce: NONCE.toString(),
-      offeredPrice: OFFERED_PRICE.toString(),
-      offeredAmount: OFFERED_AMOUNT.toString(),
-      commit: fullCommit.toString()
-    };
+    expect(sharedProof.publicSignals).to.have.length(5);
+    expect(sharedProof.publicSignals[0]).to.equal('1'); // Valid proof indicator
     
-    const { proof, publicSignals } = await generateProof(proofInputs, PROOF_CONFIG);
-    expect(publicSignals).to.have.length(5);
-    expect(publicSignals[0]).to.equal('1'); // Valid proof indicator
-    
-    // Step 3: Encode proof for contract call
-    const { encodeZKProofData } = await import("../src/utils/zkProofEncoder");
-    const { encodedData: proofData } = encodeZKProofData(proof, publicSignals);
-    
-    // Step 4: Verify predicate returns success (1)
+    // Verify predicate returns success (1)
     const predicateResult = await hiddenParamPredicate.predicate(proofData);
     expect(predicateResult).to.equal(1, "Predicate should return 1 for valid proof");
     
-    // Step 5: Build 1inch extension using proven pattern
+    // Build 1inch extension using proven pattern
     const predicateAddress = await hiddenParamPredicate.getAddress();
     const AggregationRouterV6ABI = require("../abi/AggregationRouterV6.json");
     const routerInterface = new ethers.Interface(AggregationRouterV6ABI);
@@ -103,7 +68,7 @@ describe("ZK Basic Integration - Reference Implementation", function () {
       arbitraryCall
     ]);
     
-    // Step 6: Create order with extension
+    // Create order with extension
     const makerTraits = buildMakerTraits({
       allowPartialFill: true,
       allowMultipleFills: false
@@ -122,14 +87,14 @@ describe("ZK Basic Integration - Reference Implementation", function () {
       predicate: predicate
     });
     
-    // Step 7: Pack commitment into salt (critical for ZK verification)
+    // Pack commitment into salt (critical for ZK verification)
     const extensionHash = ethers.keccak256(predicate);
-    const commitHashTruncated = BigInt(commitHash) & ((1n << 96n) - 1n);
+    const commitHashTruncated = commitment & ((1n << 96n) - 1n);
     const commitHashShifted = commitHashTruncated << 160n;
     const extensionHashLower = BigInt(extensionHash) & ((1n << 160n) - 1n);
     order.salt = commitHashShifted | extensionHashLower;
     
-    // Step 8: Validate final order structure
+    // Validate final order structure
     expect(order.extension).to.have.length.greaterThan(1000, "Extension should contain ZK predicate");
     expect(order.salt).to.be.greaterThan(0n, "Salt should be packed with commitment");
     

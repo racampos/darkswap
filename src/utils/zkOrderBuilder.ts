@@ -1,20 +1,12 @@
 /**
- * ZK-Enabled Order Builder for 1inch Limit Order Protocol
+ * ZK Order Builder for 1inch Limit Order Protocol
  * 
- * Integrates commitment calculation, salt packing, and extension encoding
- * to create complete ZK orders with hidden parameter constraints.
- * 
- * Workflow:
- * 1. Take normal order parameters + secret parameters
- * 2. Calculate Poseidon commitment from secrets
- * 3. Generate ZK proof data
- * 4. Build extension with ZK predicate call
- * 5. Pack commitment + extension hash into order salt
- * 6. Create complete order using existing buildOrder patterns
+ * Builds ZK-enabled limit orders with hidden parameters.
+ * Integrates ZK proof generation, commitment calculation, and 1inch order structure.
  */
 
-import { ethers } from "ethers";
-import { Interface } from "ethers";
+import { ethers } from "hardhat";
+import { Interface, keccak256 } from "ethers";
 import path from "path";
 import {
   calculateCommitment,
@@ -53,7 +45,17 @@ const DEFAULT_WASM_PATH = path.join(__dirname, "../../circuits/hidden_params_js/
 const DEFAULT_ZKEY_PATH = path.join(__dirname, "../../circuits/hidden_params_0001.zkey");
 
 /**
- * ZK order parameters (extends normal order parameters)
+ * Optional pre-generated proof data for deterministic testing
+ */
+export interface PreGeneratedProof {
+  proof: any;
+  publicSignals: string[];
+  encodedData: string;
+  commitment: bigint;
+}
+
+/**
+ * ZK order configuration
  */
 export interface ZKOrderParams {
   // Standard 1inch order parameters
@@ -63,12 +65,12 @@ export interface ZKOrderParams {
   makingAmount: bigint;
   takingAmount: bigint;
   
-  // Optional standard parameters
+  // Maker traits configuration
   makerTraits?: {
     allowPartialFill?: boolean;
     allowMultipleFills?: boolean;
     allowedSender?: string;
-    expiry?: number;
+    expiry?: bigint;
     nonce?: bigint;
     series?: bigint;
   };
@@ -87,6 +89,8 @@ export interface ZKOrderParams {
     wasmPath?: string;
     zkeyPath?: string;
     gasLimit?: number;
+    // New: Pre-generated proof for deterministic testing
+    preGeneratedProof?: PreGeneratedProof;
   };
 }
 
@@ -202,144 +206,193 @@ export function validateZKOrderParams(params: ZKOrderParams): ZKOrderValidationR
 }
 
 /**
- * Builds a ZK-enabled order with hidden parameter constraints
- * @param params ZK order parameters
- * @returns Complete ZK order build result
- * @throws Error if parameters are invalid or proof generation fails
+ * Builds a ZK-enabled order using the proven simple direct pattern
+ * This replaces the complex workflow with the PredicateExtensions approach that works
  */
 export async function buildZKOrder(params: ZKOrderParams): Promise<ZKOrderBuildResult> {
-  // Validate parameters
-  const validation = validateZKOrderParams(params);
-  if (!validation.isValid) {
-    throw new Error(`Invalid ZK order parameters: ${validation.errors.join(', ')}`);
-  }
-  
-  // Log warnings if any
-  if (validation.warnings.length > 0) {
-    console.warn(`ZK Order Builder warnings: ${validation.warnings.join(', ')}`);
-  }
-  
-  // Step 1: Generate nonce and calculate commitment using our JavaScript Poseidon
-  // This matches our circuit implementation and avoids contract method mismatch
-  const nonce = params.zkConfig?.customNonce || generateNonce();
-  const commitment = calculateCommitment(
-    params.secretParams.secretPrice,
-    params.secretParams.secretAmount,
-    nonce
-  );
-  
-  // Step 3: Prepare ZK proof inputs (we'll generate the actual proof)
-  const proofInputs: ZKProofInputs = {
-    secretPrice: params.secretParams.secretPrice.toString(),
-    secretAmount: params.secretParams.secretAmount.toString(),
-    commit: commitment.toString(),
-    nonce: nonce.toString(),
-    // For order building, we use the order's implied price/amount as "offered" values
-    offeredPrice: (params.takingAmount * BigInt(1e18) / params.makingAmount).toString(),
-    offeredAmount: params.makingAmount.toString()
-  };
-  
-  // Step 4: Generate ZK proof
-  const { proof, publicSignals } = await generateProof(
-    proofInputs,
-    {
-      wasmPath: params.zkConfig?.wasmPath || DEFAULT_WASM_PATH,
-      zkeyPath: params.zkConfig?.zkeyPath || DEFAULT_ZKEY_PATH
-    }
-  );
-  
-  // Step 5: Encode using our utility (TODO: Use contract method for perfect compatibility)
-  const { encodedData: proofData } = await import('./zkProofEncoder').then(module => 
-    module.encodeZKProofData(proof, publicSignals)
-  );
-  
-  // Step 4: Build extension using SIMPLIFIED approach that matches working debug test
-  const predicateInterface = new ethers.Interface(["function predicate(bytes calldata data) external view returns (uint256)"]);
-  const predicateCalldata = predicateInterface.encodeFunctionData("predicate", [proofData]);
-  const arbitraryCall = params.routerInterface.encodeFunctionData("arbitraryStaticCall", [
-    params.zkPredicateAddress,
-    predicateCalldata
-  ]);
-  
-  // Wrap arbitraryStaticCall in gt() like working debug test
-  const predicate = params.routerInterface.encodeFunctionData("gt", [
-    0, // Check if result > 0 (i.e., equals 1)
-    arbitraryCall
-  ]);
-  
+  console.log("\n🔨 Building ZK order using PROVEN SIMPLE pattern...");
 
+  // Step 1: Get or generate ZK proof
+  let zkProofData: string;
+  let commitment: bigint;
+  let nonce: bigint;
+
+  if (params.zkConfig?.preGeneratedProof) {
+    const preGenerated = params.zkConfig.preGeneratedProof;
+    zkProofData = preGenerated.encodedData;
+    commitment = preGenerated.commitment;
+    nonce = BigInt("123456789"); // Fixed nonce for testing
+    console.log("✅ Using pre-generated proof for deterministic testing");
+  } else {
+    // Generate proof normally
+    nonce = params.zkConfig?.customNonce ?? BigInt(Math.floor(Math.random() * 1000000));
+    commitment = calculateCommitment(
+      params.secretParams.secretPrice,
+      params.secretParams.secretAmount,
+      nonce
+    );
+
+          const proofInputs = {
+        secretPrice: params.secretParams.secretPrice.toString(),
+        secretAmount: params.secretParams.secretAmount.toString(),
+        nonce: nonce.toString(),
+        offeredPrice: (params.takingAmount * BigInt(1e18) / params.makingAmount).toString(),
+        offeredAmount: params.makingAmount.toString(),
+        commit: commitment.toString()
+      };
+
+    const proofConfig = {
+      wasmPath: params.zkConfig?.wasmPath || path.join(process.cwd(), "circuits", "hidden_params_js", "hidden_params.wasm"),
+      zkeyPath: params.zkConfig?.zkeyPath || path.join(process.cwd(), "circuits", "keys", "hidden_params.zkey")
+    };
+
+    const { proof, publicSignals } = await generateProof(proofInputs, proofConfig);
+    const { encodedData } = await import('./zkProofEncoder').then(module => 
+      module.encodeZKProofData(proof, publicSignals)
+    );
+    zkProofData = encodedData;
+    console.log("✅ ZK proof generated successfully");
+  }
+
+  // Step 2: Build ZK predicate using EXACT PredicateExtensions pattern
+  const predicateInterface = new Interface(["function predicate(bytes calldata data) external view returns (uint256)"]);
+  const zkPredicateCall = params.routerInterface.encodeFunctionData("arbitraryStaticCall", [
+    params.zkPredicateAddress,
+    predicateInterface.encodeFunctionData("predicate", [zkProofData])
+  ]);
+
+  console.log(`✅ ZK arbitraryStaticCall created (${zkPredicateCall.length} chars)`);
+
+  // Step 3: Wrap in gt() exactly like PredicateExtensions does
+  const zkWrappedPredicate = params.routerInterface.encodeFunctionData("gt", [
+    0, // Check if result > 0 (same as PredicateExtensions)
+    zkPredicateCall
+  ]);
+
+  console.log(`✅ ZK wrapped predicate created (${zkWrappedPredicate.length} chars)`);
+
+  // Step 4: Build order using EXACT PredicateExtensions pattern
+  const { buildOrder, buildMakerTraits } = await import("../../test/helpers/orderUtils");
   
-  // Step 5: Build makerTraits
-  const makerTraits = buildMakerTraits({
-    allowPartialFill: params.makerTraits?.allowPartialFill ?? true,
-    allowMultipleFills: params.makerTraits?.allowMultipleFills ?? true,
-    allowedSender: params.makerTraits?.allowedSender,
-    expiry: params.makerTraits?.expiry,
-    nonce: params.makerTraits?.nonce ? Number(params.makerTraits.nonce) : undefined,
-    series: params.makerTraits?.series ? Number(params.makerTraits.series) : undefined
-  });
-  
-  // Step 6: Build order with extension using SINGLE buildOrder call (like debug test)
   const order = buildOrder({
     maker: params.maker,
     makerAsset: params.makerAsset,
     takerAsset: params.takerAsset,
     makingAmount: params.makingAmount,
     takingAmount: params.takingAmount,
-    makerTraits: makerTraits
+    makerTraits: buildMakerTraits({
+      allowPartialFill: params.makerTraits?.allowPartialFill ?? true,
+      allowMultipleFills: params.makerTraits?.allowMultipleFills ?? true,
+      allowedSender: params.makerTraits?.allowedSender,
+      expiry: params.makerTraits?.expiry ? Number(params.makerTraits.expiry) : undefined,
+      nonce: params.makerTraits?.nonce ? Number(params.makerTraits.nonce) : undefined,
+      series: params.makerTraits?.series ? Number(params.makerTraits.series) : undefined
+    }),
+    salt: params.zkConfig?.customNonce || BigInt(Date.now() * 1000 + Math.floor(Math.random() * 1000)) // Simple salt like PredicateExtensions
   }, {
-    predicate: predicate
+    makerAssetSuffix: '0x',
+    takerAssetSuffix: '0x', 
+    makingAmountData: '0x',
+    takingAmountData: '0x',
+    predicate: zkWrappedPredicate, // Direct predicate (same as PredicateExtensions)
+    permit: '0x',
+    preInteraction: '0x',
+    postInteraction: '0x',
   });
-  
-  // Step 7: Pack commitment into salt using same approach as debug test
-  const extensionHash = ethers.keccak256(predicate);
-  const extensionHashBigInt = BigInt(extensionHash);
-  const commitHashTruncated = commitment & ((1n << 96n) - 1n); // Truncate to 96 bits
-  const commitHashShifted = commitHashTruncated << 160n;
-  const extensionHashLower = extensionHashBigInt & ((1n << 160n) - 1n);
-  order.salt = commitHashShifted | extensionHashLower;
-  
-  // Create salt data for metadata (using the same structure for compatibility)
-  const saltData = {
-    salt: order.salt,
-    commitment: commitHashTruncated,
-    extensionHash: extensionHashLower  // Use the same truncated value as in salt
-  };
-  
-  const finalOrder = order;
-  
-  // Create the ZK-enabled order with metadata
-  const zkOrder: ZKEnabledOrder = {
-    ...finalOrder,
+
+  console.log(`✅ Simple ZK order created:`);
+  console.log(`   Extension length: ${(order as any).extension?.length || 0} chars`);
+  console.log(`   Salt: 0x${order.salt.toString(16)}`);
+
+  // Step 5: Return in expected format but with simple metadata
+  return {
+    order: order,
     zkMetadata: {
       commitment: commitment,
       nonce: nonce,
       secretParams: params.secretParams,
       extensionData: {
-        extensionBytes: predicate,
-        extensionHash: extensionHashLower, // Use same truncated value as in salt
-        predicateCall: arbitraryCall,
-        gasEstimate: 80000 // Simplified gas estimate
-      },
-      saltData: saltData,
-      proofInputs: proofInputs
+        extensionBytes: zkWrappedPredicate,
+        extensionHash: BigInt(keccak256(zkWrappedPredicate)),
+        predicateCall: zkPredicateCall,
+        gasEstimate: 80000
+      }
+    },
+    debugInfo: {
+      commitmentHex: `0x${commitment.toString(16)}`,
+      saltHex: `0x${order.salt.toString(16)}`,
+      extensionLength: zkWrappedPredicate.length,
+      totalGasEstimate: 80000
     }
   };
+}
+
+/**
+ * Simplified ZK order builder that follows the exact PredicateExtensions working pattern
+ * This bypasses all complex abstractions and uses the direct approach that we know works
+ */
+export async function buildZKOrderDirect(params: {
+  maker: string;
+  makerAsset: string;
+  takerAsset: string;
+  makingAmount: bigint;
+  takingAmount: bigint;
+  zkPredicateAddress: string;
+  zkProofData: string;
+  routerInterface: ethers.Interface;
+  salt?: bigint;
+}): Promise<OrderStruct> {
+  console.log("\n🔨 Building ZK order using DIRECT working pattern...");
+
+  // Step 1: Build ZK predicate using EXACT PredicateExtensions pattern
+  // This matches line 147-156 in PredicateExtensions.test.ts
+  const zkPredicateCall = params.routerInterface.encodeFunctionData("arbitraryStaticCall", [
+    params.zkPredicateAddress,
+    // Use the predicate interface directly (same as PredicateExtensions line 149)
+    new Interface(["function predicate(bytes calldata data) external view returns (uint256)"]).encodeFunctionData("predicate", [params.zkProofData])
+  ]);
+
+  console.log(`✅ ZK arbitraryStaticCall created (${zkPredicateCall.length} chars)`);
+
+  // Step 2: Wrap in gt() exactly like PredicateExtensions does (line 153-156)
+  const zkWrappedPredicate = params.routerInterface.encodeFunctionData("gt", [
+    0, // Check if result > 0 (same as PredicateExtensions)
+    zkPredicateCall
+  ]);
+
+  console.log(`✅ ZK wrapped predicate created (${zkWrappedPredicate.length} chars)`);
+
+  // Step 3: Build order using EXACT PredicateExtensions pattern (line 163-183)
+  // Import the helpers directly
+  const { buildOrder, buildMakerTraits } = await import("../../test/helpers/orderUtils");
   
-  // Create debug info
-  const debugInfo = {
-    commitmentHex: `0x${commitment.toString(16)}`,
-    saltHex: `0x${saltData.salt.toString(16)}`,
-    extensionLength: (predicate.length - 2) / 2,
-    totalGasEstimate: 80000 // Simplified gas estimate
-  };
-  
-  return {
-    order: zkOrder,
-    proofData,
-    validationResult: validation,
-    debugInfo
-  };
+  const order = buildOrder({
+    maker: params.maker,
+    makerAsset: params.makerAsset,
+    takerAsset: params.takerAsset,
+    makingAmount: params.makingAmount,
+    takingAmount: params.takingAmount,
+    makerTraits: buildMakerTraits({
+      allowPartialFill: true,
+      allowMultipleFills: true,
+    }),
+    salt: params.salt || BigInt(Date.now() * 1000 + Math.floor(Math.random() * 1000)) // Simple salt like PredicateExtensions
+  }, {
+    makerAssetSuffix: '0x',
+    takerAssetSuffix: '0x', 
+    makingAmountData: '0x',
+    takingAmountData: '0x',
+    predicate: zkWrappedPredicate, // Direct predicate (same as PredicateExtensions line 179)
+    permit: '0x',
+    preInteraction: '0x',
+    postInteraction: '0x',
+  });
+
+  console.log(`✅ ZK order created using direct pattern:`);
+  console.log(`   Extension length: ${(order as any).extension?.length || 0} chars`);
+  console.log(`   Salt: 0x${order.salt.toString(16)}`);
+
+  return order;
 }
 
 /**

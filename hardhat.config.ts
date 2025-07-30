@@ -11,6 +11,7 @@ const config: HardhatUserConfig = {
       forking: {
         url: process.env.ALCHEMY_MAINNET_URL!,
       },
+      chainId: 1, // Ensure forked network reports mainnet chain ID
       // Set higher gas limits and prices for mainnet fork
       gasPrice: 20000000000, // 20 gwei
       gas: 30000000,
