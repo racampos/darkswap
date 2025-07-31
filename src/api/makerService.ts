@@ -24,6 +24,7 @@ interface OrderParameters {
   makingAmount: bigint;
   takingAmount: bigint;
   commitment: string;
+  originalSalt?: string; // Optional for backward compatibility
 }
 
 /**
@@ -206,7 +207,8 @@ export class MakerService {
         allowMultipleFills: true,
       });
 
-      // Rebuild order with ZK extension included (following working pattern)
+      // Rebuild order with ZK extension (simple approach)
+      // Let buildOrder handle salt updates automatically when extension is present
       const orderWithExtension = buildOrder({
         maker: orderParams.maker,
         makerAsset: orderParams.makerAsset,
@@ -214,13 +216,13 @@ export class MakerService {
         makingAmount: orderParams.makingAmount,
         takingAmount: orderParams.takingAmount,
         makerTraits: makerTraits,
-        salt: BigInt(orderParams.commitment), // Use commitment as salt
+        salt: orderParams.originalSalt ? BigInt(orderParams.originalSalt) : BigInt(orderParams.commitment),
       }, {
         makerAssetSuffix: '0x',
         takerAssetSuffix: '0x', 
         makingAmountData: '0x',
         takingAmountData: '0x',
-        predicate: zkWrappedPredicate, // Extension built INTO the order
+        predicate: zkWrappedPredicate, // Extension - buildOrder will handle salt update
         permit: '0x',
         preInteraction: '0x',
         postInteraction: '0x',
@@ -232,7 +234,7 @@ export class MakerService {
       // Sign the new order
       const { signCommitmentOrder } = await import('../utils/commitmentOrders');
       
-      const [maker] = await ethers.getSigners(); // Get maker signer for demo
+      const [, maker] = await ethers.getSigners(); // Use signers[1] to match demoFullExecution.ts
       const signature = await signCommitmentOrder(
         orderWithExtension,
         this.chainId,

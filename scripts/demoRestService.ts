@@ -75,7 +75,8 @@ async function demonstrateRestWorkflow() {
     takerAsset: USDC_ADDRESS,
     makingAmount: orderParams.makingAmount,
     takingAmount: orderParams.takingAmount,
-    commitment: commitmentOrder.commitment
+    commitment: commitmentOrder.commitment,
+    originalSalt: commitmentOrder.order.salt.toString() // Add originalSalt like demoFullExecution.ts
   };
 
   makerService.registerOrder(commitmentOrder.commitment, orderParameters, {
@@ -99,6 +100,15 @@ async function demonstrateRestWorkflow() {
   const { r, s, v } = ethers.Signature.from(signature);
   const vs = v === 27 ? s : "0x" + (BigInt(s) + BigInt("0x8000000000000000000000000000000000000000000000000000000000000000")).toString(16);
 
+  // Calculate real order hash using EIP-712 (like demoFullExecution.ts)
+  const { buildOrderData } = await import("../test/helpers/orderUtils");
+  const network = await ethers.provider.getNetwork();
+  const chainId = network.chainId;
+  const orderData = buildOrderData(chainId, AGGREGATION_ROUTER_V6, commitmentOrder.order);
+  const realOrderHash = ethers.TypedDataEncoder.hash(orderData.domain, orderData.types, orderData.value);
+  
+  console.log(`   Real order hash calculated: ${realOrderHash}`);
+
   // === STEP 3: ORDER PUBLICATION (SIMULATED) ===
   console.log(`\nSTEP 3: Order published to 1inch network`);
   console.log("─".repeat(40));
@@ -114,7 +124,7 @@ async function demonstrateRestWorkflow() {
   // Scenario 1: Valid fill (above secret minimum)
   console.log(`\nScenario 1: Valid fill (3200 USDC > 3000 min)`);
   await simulateAuthorizationRequest(makerService, {
-    orderHash: ethers.keccak256(ethers.toUtf8Bytes("mock-order-hash-1")),
+    orderHash: realOrderHash, // Use real order hash instead of fake
     orderParams: orderParameters,
     signature: { r, vs },
     fillAmount: BigInt("3200000000"), // 3200 USDC - above 3000 minimum
@@ -124,7 +134,7 @@ async function demonstrateRestWorkflow() {
   // Scenario 2: Valid fill (exact minimum)
   console.log(`\nScenario 2: Valid fill (3000 USDC = 3000 min)`);
   await simulateAuthorizationRequest(makerService, {
-    orderHash: ethers.keccak256(ethers.toUtf8Bytes("mock-order-hash-2")),
+    orderHash: realOrderHash, // Use real order hash instead of fake
     orderParams: orderParameters,
     signature: { r, vs },
     fillAmount: BigInt("3000000000"), // 3000 USDC - exactly at minimum
@@ -134,7 +144,7 @@ async function demonstrateRestWorkflow() {
   // Scenario 3: Invalid fill (below secret minimum)
   console.log(`\nScenario 3: Invalid fill (2500 USDC < 3000 min)`);
   await simulateAuthorizationRequest(makerService, {
-    orderHash: ethers.keccak256(ethers.toUtf8Bytes("mock-order-hash-3")),
+    orderHash: realOrderHash, // Use real order hash instead of fake
     orderParams: orderParameters,
     signature: { r, vs },
     fillAmount: BigInt("2500000000"), // 2500 USDC - below 3000 minimum
@@ -170,12 +180,12 @@ async function simulateAuthorizationRequest(
           console.log(`   Response [${code}]: ${data.success ? 'SUCCESS' : 'FAILED'}`);
           
           if (data.success) {
-            console.log(`   Authorization granted - Order rebuilt with ZK extension`);
+            console.log(`   Authorization granted - New order with ZK extension`);
             if (data.orderWithExtension) {
-              console.log(`   Order with extension ready for execution`);
+              console.log(`   Order rebuilt with ZK predicate extension`);
               console.log(`   Extension length: ${(data.orderWithExtension as any).extension?.length || 0} chars`);
-              console.log(`   Order signature provided`);
-              console.log(`   Ready for taker to submit fillOrderArgs!`);
+              console.log(`   New order signature provided`);
+              console.log(`   Ready for taker to execute with fillOrderArgs!`);
             }
           } else {
             console.log(`   Authorization denied: ${data.reason || data.error}`);
@@ -186,12 +196,12 @@ async function simulateAuthorizationRequest(
         statusCode = 200;
         responseData = data;
         console.log(`   Response [200]: SUCCESS`);
-        console.log(`   Authorization granted - Order rebuilt with ZK extension`);
+        console.log(`   Authorization granted - New order with ZK extension`);
         if (data.orderWithExtension) {
-          console.log(`   Order with extension ready for execution`);
+          console.log(`   Order rebuilt with ZK predicate extension`);
           console.log(`   Extension length: ${(data.orderWithExtension as any).extension?.length || 0} chars`);
-          console.log(`   Order signature provided`);
-          console.log(`   Ready for taker to submit fillOrderArgs!`);
+          console.log(`   New order signature provided`);
+          console.log(`   Ready for taker to execute with fillOrderArgs!`);
         }
       }
     };
@@ -201,9 +211,9 @@ async function simulateAuthorizationRequest(
 
     // Show additional details if successful
     if (statusCode === 200 && responseData?.success) {
-      console.log(`   Architecture: Order rebuilt with predicate extension included`);
-      console.log(`   Innovation: ZK proof embedded directly in order structure`);
-      console.log(`   Ready: Taker can now execute with standard fillOrderArgs`);
+      console.log(`   Architecture: Order rebuilt with ZK predicate extension`);
+      console.log(`   Innovation: ZK proof embedded in new order structure`);
+      console.log(`   Ready: Taker can execute the new order with fillOrderArgs`);
     }
 
   } catch (error) {

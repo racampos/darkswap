@@ -25,6 +25,7 @@
     "test:commitment-orders": "npx hardhat test test/CommitmentOrders.test.ts",
     "demo:rest-service": "npx hardhat run scripts/demoRestService.ts",
     "demo:full-workflow": "npm run demo:rest-service",
+    "demo:full-execution": "npx hardhat run scripts/demoFullExecution.ts",
     "test:proof-generation": "node scripts/generateProof.js",
     "test:proof-format": "npm run test:proof-generation",
     "circuit:version": "circom --version && snarkjs --version",

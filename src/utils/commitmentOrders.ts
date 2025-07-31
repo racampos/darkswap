@@ -70,9 +70,17 @@ export async function buildCommitmentOrder(params: CommitmentOrderParams): Promi
     series: 0
   });
 
-  // Build standard 1inch order with commitment as salt
+  // Build salt according to 1inch protocol:
+  // Upper 96 bits: commitment hash
+  // Lower 160 bits: base salt (for orders without extensions)
+  const commitmentTruncated = BigInt(commitment) & ((1n << 96n) - 1n);
+  const commitmentShifted = commitmentTruncated << 160n;
+  const baseSalt = BigInt(ethers.keccak256(ethers.toUtf8Bytes("ZK_HIDDEN_PARAMS_ORDER"))) & ((1n << 160n) - 1n);
+  const properSalt = commitmentShifted | baseSalt;
+
+  // Build standard 1inch order with properly structured salt
   const baseOrder = buildOrder({
-    salt: commitment,
+    salt: properSalt,
     maker: params.maker,
     receiver: "0x0000000000000000000000000000000000000000", // Zero address for maker
     makerAsset: params.makerAsset,
