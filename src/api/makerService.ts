@@ -53,27 +53,28 @@ interface FillAuthorizationResponse {
 }
 
 /**
- * Maker Authorization Service
- * 
- * Provides REST API for takers to request fill authorization.
- * Generates ZK proofs for valid fills that meet secret constraints.
+ * Service for handling maker authorization requests and ZK proof generation
  */
 export class MakerService {
-  private app: express.Application;
+  private app?: express.Application;
   private secretsDatabase: Map<string, SecretParameters>;
   private orderParamsDatabase: Map<string, OrderParameters>;
   private routerAddress: string;
   private chainId: bigint;
   private zkPredicateAddress?: string;
 
-  constructor(routerAddress: string, chainId: bigint = 1n) {
-    this.app = express();
+  constructor(routerAddress: string, chainId: bigint = 1n, setupExpress: boolean = false) {
     this.secretsDatabase = new Map();
     this.orderParamsDatabase = new Map();
     this.routerAddress = routerAddress;
     this.chainId = chainId;
-    this.setupMiddleware();
-    this.setupRoutes();
+    
+    // Only set up Express app if explicitly requested (for backward compatibility)
+    if (setupExpress) {
+      this.app = express();
+      this.setupMiddleware();
+      this.setupRoutes();
+    }
   }
 
   /**
@@ -114,9 +115,14 @@ export class MakerService {
   /**
    * Register order parameters and secrets for a commitment
    */
-  public registerOrder(commitment: string, orderParams: OrderParameters, secrets: SecretParameters): void {
+  public registerOrder(commitment: string, orderParams: OrderParameters, secrets: SecretParameters, orderHash?: string): void {
     this.orderParamsDatabase.set(commitment, orderParams);
     this.secretsDatabase.set(commitment, secrets);
+    
+    // Also register by orderHash if provided (for authorizeFillRequest lookup)
+    if (orderHash) {
+      this.orderParamsDatabase.set(orderHash, orderParams);
+    }
   }
 
   /**
@@ -260,7 +266,108 @@ export class MakerService {
   }
 
   /**
-   * Main authorization logic
+   * Public authorization method for REST API server
+   */
+  public async authorizeFillRequest(orderHash: string, fillAmount: bigint): Promise<{
+    success: boolean;
+    orderWithExtension?: any;
+    signature?: string;
+    error?: string;
+  }> {
+    try {
+      // Look up order parameters by order hash
+      const orderParams = this.orderParamsDatabase.get(orderHash);
+      if (!orderParams) {
+        return {
+          success: false,
+          error: 'Order not found - no parameters registered for this hash'
+        };
+      }
+
+      // Extract commitment from order
+      const commitment = BigInt(orderParams.commitment);
+      const commitmentStr = commitment.toString();
+      
+      console.log(`   Extracted Commitment: ${commitmentStr}`);
+
+      // Look up secrets for this commitment
+      const secrets = this.secretsDatabase.get(commitmentStr);
+      if (!secrets) {
+        return {
+          success: false,
+          error: 'Order not found - no secrets registered for this commitment'
+        };
+      }
+
+      console.log(`   Found secrets for maker: ${secrets.maker}`);
+
+      // Verify the order is from the expected maker
+      if (orderParams.maker.toLowerCase() !== secrets.maker.toLowerCase()) {
+        return {
+          success: false,
+          error: 'Unauthorized - order maker does not match registered maker'
+        };
+      }
+
+      // Check if fill amount meets secret requirements
+      const fillAmountNumber = Number(fillAmount);
+      if (fillAmountNumber < secrets.secretPrice) {
+        return {
+          success: false,
+          error: `Insufficient amount - fill amount ${fillAmountNumber} below minimum threshold ${secrets.secretPrice}`
+        };
+      }
+
+      console.log(`   Fill amount ${fillAmountNumber} >= secret minimum ${secrets.secretPrice}`);
+
+      // Generate ZK proof for this fill
+      console.log(`   Generating ZK proof...`);
+      const proofResult = await this.generateZKProof(secrets, BigInt(fillAmountNumber), commitment);
+      
+      if (!proofResult.success) {
+        return {
+          success: false,
+          error: `Proof generation failed: ${proofResult.error}`
+        };
+      }
+
+      console.log(`   ZK proof generated successfully`);
+
+      // Build order with extension and sign
+      console.log(`   Building order with ZK extension...`);
+      const orderResult = await this.buildOrderWithExtension(
+        orderParams,
+        BigInt(fillAmountNumber),
+        proofResult.proof!,
+        "0x0000000000000000000000000000000000000000" // Placeholder taker for now
+      );
+
+      if (!orderResult.success) {
+        return {
+          success: false,
+          error: `Order building failed: ${orderResult.error}`
+        };
+      }
+
+      console.log(`   AUTHORIZATION SUCCESSFUL`);
+
+      return {
+        success: true,
+        orderWithExtension: orderResult.orderWithExtension,
+        signature: orderResult.signature
+      };
+
+    } catch (error) {
+      console.error('Authorization error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Main authorization logic (Express handler)
    */
   private async authorizeFill(req: Request, res: Response) {
     try {
@@ -365,8 +472,8 @@ export class MakerService {
   }
 
   private setupMiddleware() {
-    this.app.use(express.json());
-    this.app.use((req: Request, res: Response, next: NextFunction) => {
+    this.app?.use(express.json());
+    this.app?.use((req: Request, res: Response, next: NextFunction) => {
       console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
       next();
     });
@@ -374,18 +481,18 @@ export class MakerService {
 
   private setupRoutes() {
     // Main authorization endpoint
-    this.app.post('/authorize-fill', this.authorizeFill.bind(this));
+    this.app?.post('/authorize-fill', this.authorizeFill.bind(this));
     
     // Order status endpoint
-    this.app.get('/order-status/:commitment', this.getOrderStatus.bind(this));
+    this.app?.get('/order-status/:commitment', this.getOrderStatus.bind(this));
     
     // Health check
-    this.app.get('/health', (req: Request, res: Response) => {
+    this.app?.get('/health', (req: Request, res: Response) => {
       res.json({ status: 'healthy', timestamp: new Date().toISOString() });
     });
 
     // Debug endpoint for demo
-    this.app.get('/debug/secrets', this.getSecretsDebug.bind(this));
+    this.app?.get('/debug/secrets', this.getSecretsDebug.bind(this));
   }
 
   /**
@@ -432,7 +539,7 @@ export class MakerService {
    * Start the service
    */
   public start(port: number = 3000): void {
-    this.app.listen(port, () => {
+    this.app?.listen(port, () => {
       console.log(`\nMaker Authorization Service running on port ${port}`);
       console.log(`Endpoints:`);
       console.log(`   POST /authorize-fill - Request fill authorization`);

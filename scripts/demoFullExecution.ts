@@ -1,5 +1,5 @@
 import { ethers } from "hardhat";
-import MakerService from "../src/api/makerService";
+import { MakerService } from "../src/api/makerService";
 import { buildCommitmentOrder, signCommitmentOrder } from "../src/utils/commitmentOrders";
 import AggregationRouterV6ABI from "../abi/AggregationRouterV6.json";
 
@@ -59,12 +59,19 @@ async function demonstrateFullExecution() {
   console.log(`   Order signed`);
 
   // Initialize maker service
-  const makerService = new MakerService(AGGREGATION_ROUTER_V6);
+  const makerService = new MakerService(AGGREGATION_ROUTER_V6, BigInt(1), false); // No Express needed for demo
   await makerService.initialize();
   console.log(`   Maker service initialized`);
 
   // Setup balances and register order
   await setupTestBalances(maker, taker);
+  
+  // Calculate the real order hash using EIP-712 (needed for registration)
+  const { buildOrderData } = await import("../test/helpers/orderUtils");
+  const network = await ethers.provider.getNetwork();
+  const chainId = network.chainId;
+  const orderData = buildOrderData(chainId, AGGREGATION_ROUTER_V6, commitmentOrder.order);
+  const realOrderHash = ethers.TypedDataEncoder.hash(orderData.domain, orderData.types, orderData.value);
   
   const orderParameters = {
     maker: maker.address,
@@ -81,8 +88,9 @@ async function demonstrateFullExecution() {
     secretAmount: orderParams.secretParams.secretAmount,
     nonce: orderParams.secretParams.nonce,
     maker: maker.address
-  });
+  }, realOrderHash); // Pass the orderHash for lookup
   console.log(`   Order registered with service`);
+  console.log(`   Real order hash: ${realOrderHash}`);
 
   // === STEP 2: SHOW INITIAL BALANCES ===
   console.log(`\nSTEP 2: Initial balances`);
@@ -107,59 +115,21 @@ async function demonstrateFullExecution() {
 
   const fillAmount = BigInt("3200000000"); // 3200 USDC - above minimum
   console.log(`   Requesting authorization for ${ethers.formatUnits(fillAmount, 6)} USDC fill`);
-
-  // Parse original signature for authorization request
-  const authSig = ethers.Signature.from(originalSignature);
-  const authR = authSig.r;
-  const authVs = authSig.yParityAndS; // Use ethers' built-in yParityAndS like working tests
-
-  // Calculate the real order hash using EIP-712 (same as 1inch protocol)
-  const { buildOrderData } = await import("../test/helpers/orderUtils");
-  const network = await ethers.provider.getNetwork();
-  const chainId = network.chainId;
-  
-  const orderData = buildOrderData(chainId, AGGREGATION_ROUTER_V6, commitmentOrder.order);
-  const realOrderHash = ethers.TypedDataEncoder.hash(orderData.domain, orderData.types, orderData.value);
-  
-  console.log(`   Real order hash: ${realOrderHash}`);
   console.log(`   Order to be rebuilt: salt=${commitmentOrder.order.salt.toString()}`);
 
-  // Simulate authorization request with REAL order hash
-  const authRequest = {
-    orderHash: realOrderHash, // Use the real EIP-712 hash of the commitment order
-    orderParams: orderParameters,
-    signature: { r: authR, vs: authVs }, // Use properly parsed signature
-    fillAmount: fillAmount,
-    taker: taker.address
-  };
+  // Use the new clean authorization method
+  console.log(`   Calling makerService.authorizeFillRequest...`);
+  const authResponse = await makerService.authorizeFillRequest(realOrderHash, fillAmount);
 
-  let authResponse: any = null;
-
-  // Mock Express response to capture the authorization result
-  const mockRes = {
-    json: (data: any) => {
-      authResponse = data;
-      console.log(`   Authorization ${data.success ? 'GRANTED' : 'DENIED'}`);
-      if (data.success) {
-        console.log(`   Received order with ZK extension`);
-        console.log(`   Extension length: ${(data.orderWithExtension as any).extension?.length || 0} chars`);
-      }
-    },
-    status: (code: number) => ({
-      json: (data: any) => {
-        authResponse = data;
-        console.log(`   Authorization DENIED [${code}]: ${data.reason}`);
-      }
-    })
-  };
-
-  const mockReq = { body: authRequest };
-  await (makerService as any).authorizeFill(mockReq, mockRes);
-
-  if (!authResponse?.success) {
+  if (!authResponse.success) {
+    console.log(`   Authorization DENIED: ${authResponse.error}`);
     console.log(`   Demo ended: Authorization failed`);
     return;
   }
+
+  console.log(`   Authorization GRANTED`);
+  console.log(`   Received order with ZK extension`);
+  console.log(`   Extension length: ${(authResponse.orderWithExtension as any).extension?.length || 0} chars`);
 
   // === STEP 4: TAKER EXECUTES ORDER ===
   console.log(`\nSTEP 4: Taker executes order on-chain`);

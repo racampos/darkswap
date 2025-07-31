@@ -1,5 +1,5 @@
 import { ethers } from "hardhat";
-import MakerService from "../src/api/makerService";
+import { MakerService } from "../src/api/makerService";
 import { buildCommitmentOrder, signCommitmentOrder } from "../src/utils/commitmentOrders";
 
 const AGGREGATION_ROUTER_V6 = "0x111111125421cA6dc452d289314280a0f8842A65";
@@ -60,13 +60,20 @@ async function demonstrateRestWorkflow() {
   console.log(`\nSTEP 2: Maker starts authorization service`);
   console.log("─".repeat(40));
 
-  const makerService = new MakerService(AGGREGATION_ROUTER_V6);
+  const makerService = new MakerService(AGGREGATION_ROUTER_V6, BigInt(1), false); // No Express needed for demo
   
   // Initialize service (deploy ZK contracts)
   await makerService.initialize();
 
   // Setup test balances and approvals for actual execution
   await setupTestBalances(maker, taker);
+  
+  // Calculate real order hash using EIP-712 (needed for registration)
+  const { buildOrderData } = await import("../test/helpers/orderUtils");
+  const network = await ethers.provider.getNetwork();
+  const chainId = network.chainId;
+  const orderData = buildOrderData(chainId, AGGREGATION_ROUTER_V6, commitmentOrder.order);
+  const realOrderHash = ethers.TypedDataEncoder.hash(orderData.domain, orderData.types, orderData.value);
   
   // Register order parameters and secrets for the commitment
   const orderParameters = {
@@ -84,10 +91,11 @@ async function demonstrateRestWorkflow() {
     secretAmount: orderParams.secretParams.secretAmount,
     nonce: orderParams.secretParams.nonce,
     maker: maker.address
-  });
+  }, realOrderHash); // Pass the orderHash for lookup
 
   console.log(`   Service initialized`);
   console.log(`   Secrets registered for commitment`);
+  console.log(`   Real order hash calculated: ${realOrderHash}`);
 
   // Simulate starting the service (without actually binding to port)
   console.log(`   Service would run on: http://localhost:3000`);
@@ -99,15 +107,6 @@ async function demonstrateRestWorkflow() {
   // Parse signature for 1inch format
   const { r, s, v } = ethers.Signature.from(signature);
   const vs = v === 27 ? s : "0x" + (BigInt(s) + BigInt("0x8000000000000000000000000000000000000000000000000000000000000000")).toString(16);
-
-  // Calculate real order hash using EIP-712 (like demoFullExecution.ts)
-  const { buildOrderData } = await import("../test/helpers/orderUtils");
-  const network = await ethers.provider.getNetwork();
-  const chainId = network.chainId;
-  const orderData = buildOrderData(chainId, AGGREGATION_ROUTER_V6, commitmentOrder.order);
-  const realOrderHash = ethers.TypedDataEncoder.hash(orderData.domain, orderData.types, orderData.value);
-  
-  console.log(`   Real order hash calculated: ${realOrderHash}`);
 
   // === STEP 3: ORDER PUBLICATION (SIMULATED) ===
   console.log(`\nSTEP 3: Order published to 1inch network`);
@@ -159,61 +158,30 @@ async function simulateAuthorizationRequest(
   service: MakerService, 
   request: any
 ): Promise<void> {
-  console.log(`   Request: ${request.fillAmount} wei fill`);
+  console.log(`   Request: ${ethers.formatUnits(request.fillAmount, 6)} USDC fill`);
   
   try {
-    // Mock the Express request/response objects
-    const mockReq = {
-      body: request,
-      method: 'POST',
-      path: '/authorize-fill'
-    };
+    // Use the new clean authorization method
+    const authResponse = await service.authorizeFillRequest(
+      request.orderHash,
+      request.fillAmount
+    );
 
-    let responseData: any = null;
-    let statusCode = 200;
-
-    const mockRes = {
-      status: (code: number) => ({
-        json: (data: any) => {
-          statusCode = code;
-          responseData = data;
-          console.log(`   Response [${code}]: ${data.success ? 'SUCCESS' : 'FAILED'}`);
-          
-          if (data.success) {
-            console.log(`   Authorization granted - New order with ZK extension`);
-            if (data.orderWithExtension) {
-              console.log(`   Order rebuilt with ZK predicate extension`);
-              console.log(`   Extension length: ${(data.orderWithExtension as any).extension?.length || 0} chars`);
-              console.log(`   New order signature provided`);
-              console.log(`   Ready for taker to execute with fillOrderArgs!`);
-            }
-          } else {
-            console.log(`   Authorization denied: ${data.reason || data.error}`);
-          }
-        }
-      }),
-      json: (data: any) => {
-        statusCode = 200;
-        responseData = data;
-        console.log(`   Response [200]: SUCCESS`);
-        console.log(`   Authorization granted - New order with ZK extension`);
-        if (data.orderWithExtension) {
-          console.log(`   Order rebuilt with ZK predicate extension`);
-          console.log(`   Extension length: ${(data.orderWithExtension as any).extension?.length || 0} chars`);
-          console.log(`   New order signature provided`);
-          console.log(`   Ready for taker to execute with fillOrderArgs!`);
-        }
+    if (authResponse.success) {
+      console.log(`   Response: SUCCESS`);
+      console.log(`   Authorization granted - New order with ZK extension`);
+      if (authResponse.orderWithExtension) {
+        console.log(`   Order rebuilt with ZK predicate extension`);
+        console.log(`   Extension length: ${(authResponse.orderWithExtension as any).extension?.length || 0} chars`);
+        console.log(`   New order signature provided`);
+        console.log(`   Ready for taker to execute with fillOrderArgs!`);
       }
-    };
-
-    // Access the private method for demo (in real app this would be HTTP calls)
-    await (service as any).authorizeFill(mockReq, mockRes);
-
-    // Show additional details if successful
-    if (statusCode === 200 && responseData?.success) {
       console.log(`   Architecture: Order rebuilt with ZK predicate extension`);
       console.log(`   Innovation: ZK proof embedded in new order structure`);
       console.log(`   Ready: Taker can execute the new order with fillOrderArgs`);
+    } else {
+      console.log(`   Response: FAILED`);
+      console.log(`   Authorization denied: ${authResponse.error}`);
     }
 
   } catch (error) {
