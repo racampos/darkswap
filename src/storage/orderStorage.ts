@@ -135,6 +135,7 @@ export class OrderStorage {
         orderData: request.orderData,
         signature: request.signature,
         commitment: request.commitment,
+        secrets: request.secrets,
         metadata: {
           ...request.metadata,
           published: new Date().toISOString(),

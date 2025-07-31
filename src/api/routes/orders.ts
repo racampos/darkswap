@@ -55,7 +55,16 @@ export function ordersRouter(makerService: MakerService): Router {
           timestamp: new Date().toISOString()
         };
         
-        res.json(response);
+        // BigInt replacer function for JSON serialization
+        const bigIntReplacer = (key: string, value: any) => {
+          if (typeof value === 'bigint') {
+            return value.toString();
+          }
+          return value;
+        };
+        
+        res.setHeader('Content-Type', 'application/json');
+        res.send(JSON.stringify(response, bigIntReplacer, 2));
       } else {
         console.log(`❌ Authorization failed: ${authResult.error}`);
         

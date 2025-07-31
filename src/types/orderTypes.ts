@@ -1,5 +1,12 @@
 export type OrderStatus = 'active' | 'filled' | 'cancelled';
 
+export interface SecretParameters {
+  secretPrice: string; // BigInt as string for JSON serialization
+  secretAmount: string; // BigInt as string for JSON serialization
+  nonce: string; // BigInt as string for JSON serialization
+  maker: string;
+}
+
 export interface OrderMetadata {
   maker: string;
   makerAsset: string;
@@ -18,6 +25,7 @@ export interface PublishedOrder {
   orderData: any; // 1inch order structure - using any for flexibility
   signature: string;
   commitment: string;
+  secrets: SecretParameters; // The actual secrets used for commitment generation
   metadata: OrderMetadata;
 }
 
@@ -46,6 +54,7 @@ export interface CreateOrderRequest {
   orderData: any;
   signature: string;
   commitment: string;
+  secrets: SecretParameters; // The actual secrets used for commitment generation
   metadata: Omit<OrderMetadata, 'published' | 'status'>;
 }
 

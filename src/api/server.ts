@@ -1,7 +1,7 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import { MakerService } from './makerService';
-// import { ordersRouter } from './routes/orders';
+import { ordersRouter } from './routes/orders';
 // import { validationMiddleware } from './middleware/validation';
 import { getNetworkConfig } from '../../scripts/utils/networkConfig';
 import { ethers } from 'hardhat';
@@ -66,8 +66,8 @@ export class DemoAPIServer {
       });
     });
 
-    // Temporarily comment out orders router to isolate the issue
-    // this.app.use('/api', ordersRouter(this.makerService));
+    // Orders router with all order-related endpoints
+    this.app.use('/api', ordersRouter(this.makerService));
 
     // Error handling middleware
     this.app.use((error: any, req: Request, res: Response, next: any) => {

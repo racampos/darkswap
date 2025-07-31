@@ -1,9 +1,9 @@
 {
   "orders": [
     {
-      "id": "order_mdrrsxh2_ofnt46",
+      "id": "order_mdrsv2ma_0cu2og",
       "orderData": {
-        "salt": "101275547010133562312043929015258716436910525940082562872790601908437397257702",
+        "salt": "48102077957627090787660998185010943918669029916663952562008657553127902789094",
         "maker": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
         "receiver": "0x0000000000000000000000000000000000000000",
         "makerAsset": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
@@ -13,36 +13,14 @@
         "makerTraits": "0",
         "extension": "0x"
       },
-      "signature": "0x11ac61864837306da674012461ff89fd053da7d9114935827f5cfac3df27fd572f070a3efe1225f2fd54ecdaf51819ef11af8ad18d1e80074dc988b1c86f25ce1c",
-      "commitment": "7945797871879495816547689033673531957813472270025640989491416672163445641561",
-      "metadata": {
-        "maker": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
-        "makerAsset": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-        "takerAsset": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-        "makingAmount": "2000000000000000000",
-        "takingAmount": "7200000000",
-        "network": "localhost",
-        "originalSalt": "101275547010133562312043929015258716436910525940082562872790601908437397257702",
-        "displayPrice": "7200.0 USDC per WETH",
-        "published": "2025-07-31T19:11:06.615Z",
-        "status": "active"
-      }
-    },
-    {
-      "id": "order_mdrs0h8f_7j20u0",
-      "orderData": {
-        "salt": "75535322959825222208895874376569302362019113024706393415092643237359808658918",
-        "maker": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
-        "receiver": "0x0000000000000000000000000000000000000000",
-        "makerAsset": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-        "takerAsset": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-        "makingAmount": "2000000000000000000",
-        "takingAmount": "7200000000",
-        "makerTraits": "0",
-        "extension": "0x"
+      "signature": "0x089602c9b321ba86fafeb74e777bbbbb64c027bd76b43a8b0b5ad993a3330de806ecce92ef1427644ff36bd2c1a09b0bf6cb50f6e427ba455b304293cc3782941b",
+      "commitment": "19477362935624490461185570505783460300122658278462219088978378739705589019072",
+      "secrets": {
+        "secretPrice": "6000000000",
+        "secretAmount": "6000000000",
+        "nonce": "1754310301929",
+        "maker": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
       },
-      "signature": "0xf18549be7f008e09c442158021cda57ef58201ebc96dcfc85740f28351fc8b300be46db6e95a3f36bcc38c5a16fb7265fcc2f9d702264a07c26199b00c15c0551b",
-      "commitment": "5641500062623284875131067740620819126584500405001947491027087817823278810864",
       "metadata": {
         "maker": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
         "makerAsset": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
@@ -50,41 +28,13 @@
         "makingAmount": "2000000000000000000",
         "takingAmount": "7200000000",
         "network": "localhost",
-        "originalSalt": "75535322959825222208895874376569302362019113024706393415092643237359808658918",
+        "originalSalt": "48102077957627090787660998185010943918669029916663952562008657553127902789094",
         "displayPrice": "7200.0 USDC per WETH",
-        "published": "2025-07-31T19:16:58.815Z",
-        "status": "active"
-      }
-    },
-    {
-      "id": "order_mdrs0ps2_wvq2u1",
-      "orderData": {
-        "salt": "22263690382224223580000562875399115998553641708042050276306987332527686401510",
-        "maker": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
-        "receiver": "0x0000000000000000000000000000000000000000",
-        "makerAsset": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-        "takerAsset": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-        "makingAmount": "2000000000000000000",
-        "takingAmount": "7200000000",
-        "makerTraits": "0",
-        "extension": "0x"
-      },
-      "signature": "0x0cfd0244c9dc7c202445b90dad0daf60f94cdfc66389dd93f39fb409f9c39a722a760ae93fc3797c2443758bf19ce6914820223f4d67e8197fb61159fe0c3e191c",
-      "commitment": "5392956879955212276304327640093029598349364675344919978411293618602772463573",
-      "metadata": {
-        "maker": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
-        "makerAsset": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-        "takerAsset": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-        "makingAmount": "2000000000000000000",
-        "takingAmount": "7200000000",
-        "network": "localhost",
-        "originalSalt": "22263690382224223580000562875399115998553641708042050276306987332527686401510",
-        "displayPrice": "7200.0 USDC per WETH",
-        "published": "2025-07-31T19:17:09.891Z",
-        "status": "active"
+        "published": "2025-07-31T19:40:46.210Z",
+        "status": "filled"
       }
     }
   ],
-  "lastUpdated": "2025-07-31T19:17:09.891Z",
+  "lastUpdated": "2025-07-31T20:31:16.997Z",
   "version": "1.0.0"
 }

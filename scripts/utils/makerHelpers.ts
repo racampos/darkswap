@@ -186,6 +186,12 @@ export async function publishOrderToStorage(request: PublishOrderRequest): Promi
       orderData: request.orderData,
       signature: request.signature,
       commitment: request.commitment,
+      secrets: {
+        secretPrice: request.secrets.secretPrice.toString(),
+        secretAmount: request.secrets.secretAmount.toString(),
+        nonce: request.secrets.nonce.toString(),
+        maker: request.secrets.maker
+      },
       metadata: {
         maker: request.metadata.maker,
         makerAsset: request.metadata.makerAsset,

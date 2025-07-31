@@ -1,10 +1,91 @@
 import { DemoAPIServer, ServerConfig } from '../src/api/server';
 import { getNetworkConfig } from './utils/networkConfig';
+import { OrderStorage } from '../src/storage/orderStorage';
+import { buildOrderData } from '../test/helpers/orderUtils';
+import { ethers } from 'hardhat';
 
 interface StartupOptions {
   port?: number;
   network?: string;
   enableLogging?: boolean;
+}
+
+/**
+ * Load published orders from storage and register them with the MakerService
+ * This enables the API to handle authorization requests for existing orders
+ */
+async function loadAndRegisterPublishedOrders(server: DemoAPIServer, network: string) {
+  try {
+    console.log(`\n📚 Loading published orders from storage...`);
+    
+    const orderStorage = new OrderStorage('storage/published_orders.json');
+    const publishedOrders = await orderStorage.getActiveOrders(network);
+    
+    if (publishedOrders.length === 0) {
+      console.log(`   ℹ️  No published orders found for network: ${network}`);
+      return;
+    }
+    
+    console.log(`   📋 Found ${publishedOrders.length} published orders to register`);
+    
+    const makerService = server.getMakerService();
+    if (!makerService) {
+      console.error(`   ❌ MakerService not available - cannot register orders`);
+      return;
+    }
+    
+    const networkConfig = getNetworkConfig(network);
+    
+    for (const order of publishedOrders) {
+      try {
+        // Calculate order hash
+        const orderData = buildOrderData(
+          BigInt(networkConfig.chainId), 
+          networkConfig.routerAddress, 
+          order.orderData
+        );
+        const orderHash = ethers.TypedDataEncoder.hash(orderData.domain, orderData.types, orderData.value);
+        
+        // Reconstruct order parameters
+        const orderParameters = {
+          maker: order.metadata.maker,
+          makerAsset: order.metadata.makerAsset,
+          takerAsset: order.metadata.takerAsset,
+          makingAmount: BigInt(order.metadata.makingAmount),
+          takingAmount: BigInt(order.metadata.takingAmount),
+          commitment: order.commitment,
+          originalSalt: order.metadata.originalSalt
+        };
+        
+        // Load the real secrets from storage (convert strings back to BigInt)
+        const secrets = {
+          secretPrice: BigInt(order.secrets.secretPrice),
+          secretAmount: BigInt(order.secrets.secretAmount),
+          nonce: BigInt(order.secrets.nonce),
+          maker: order.secrets.maker
+        };
+        
+        // Register the order with the MakerService
+        makerService.registerOrder(
+          order.commitment,
+          orderParameters,
+          secrets,
+          orderHash
+        );
+        
+        console.log(`   ✅ Registered order: ${order.id} (${orderHash.slice(0, 20)}...)`);
+        
+      } catch (error) {
+        console.error(`   ❌ Failed to register order ${order.id}:`, error);
+      }
+    }
+    
+    console.log(`   🎯 Order registration complete`);
+    
+  } catch (error) {
+    console.error(`   ❌ Failed to load published orders:`, error);
+    // Don't fail the entire service - just log the error
+  }
 }
 
 async function startMakerService(options: StartupOptions = {}) {
@@ -51,6 +132,9 @@ async function startMakerService(options: StartupOptions = {}) {
     // Initialize dependencies (MakerService, contracts, etc.)
     await server.initialize();
     
+    // Load and register published orders
+    await loadAndRegisterPublishedOrders(server, network);
+
     // Start the server
     console.log(`\n🚀 Starting HTTP server...`);
     await server.start();
