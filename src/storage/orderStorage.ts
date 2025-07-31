@@ -88,7 +88,15 @@ export class OrderStorage {
     data.version = this.STORAGE_VERSION;
     
     try {
-      fs.writeFileSync(this.storageFile, JSON.stringify(data, null, 2), 'utf8');
+      // BigInt replacer function for JSON serialization
+      const bigIntReplacer = (key: string, value: any) => {
+        if (typeof value === 'bigint') {
+          return value.toString();
+        }
+        return value;
+      };
+      
+      fs.writeFileSync(this.storageFile, JSON.stringify(data, bigIntReplacer, 2), 'utf8');
     } catch (error) {
       console.error('Failed to save storage data:', error);
       throw new Error(`Failed to write to storage file: ${this.storageFile}`);
