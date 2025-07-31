@@ -1,0 +1,22 @@
+{
+  "networks": {
+    "localhost": {
+      "chainId": 1,
+      "contracts": {
+        "Groth16Verifier": "0xFEE2d383Ee292283eC43bdf0fa360296BE1e1149",
+        "HiddenParamPredicateZK": "0xf0014CBe67b3aB638bdaA2e2Cb1B531935829E50"
+      },
+      "deployedAt": "2025-07-31T15:07:01.648Z",
+      "deploymentTxHash": ""
+    },
+    "hardhat": {
+      "chainId": 1,
+      "contracts": {
+        "Groth16Verifier": "",
+        "HiddenParamPredicateZK": ""
+      },
+      "deployedAt": "",
+      "deploymentTxHash": ""
+    }
+  }
+}

@@ -16,6 +16,14 @@ const config: HardhatUserConfig = {
       gasPrice: 20000000000, // 20 gwei
       gas: 30000000,
       allowUnlimitedContractSize: true
+    },
+    localhost: {
+      url: "http://127.0.0.1:8545",
+      chainId: 1, // Matches forked mainnet
+      accounts: "remote", // Use accounts from the running node
+      gas: 30000000,
+      gasPrice: 20000000000,
+      allowUnlimitedContractSize: true
     }
   }
 };
