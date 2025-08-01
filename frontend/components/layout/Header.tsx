@@ -1,8 +1,14 @@
 'use client'
 
-// import { ConnectButton } from '@rainbow-me/rainbowkit'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { Navigation } from './Navigation'
+
+// Dynamically import ConnectButton to avoid SSR issues
+const ConnectButton = dynamic(
+  () => import('@rainbow-me/rainbowkit').then((mod) => ({ default: mod.ConnectButton })),
+  { ssr: false }
+)
 
 export function Header() {
   return (
@@ -19,10 +25,7 @@ export function Header() {
         </div>
         
         <div className="flex items-center space-x-4">
-          <div className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm">
-            Connect Wallet (Coming Soon)
-          </div>
-          {/* <ConnectButton /> */}
+          <ConnectButton />
         </div>
       </div>
     </header>

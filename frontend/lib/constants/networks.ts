@@ -1,9 +1,9 @@
 import { type NetworkConfig } from '@/types'
 
 export const SUPPORTED_NETWORKS: Record<number, NetworkConfig> = {
-  1: {
-    chainId: 1,
-    name: 'Localhost (Forked Mainnet)',
+  31337: {
+    chainId: 31337,
+    name: 'DarkSwap Local (Forked Mainnet)',
     rpcUrl: 'http://127.0.0.1:8545',
     blockExplorer: 'https://etherscan.io',
     routerAddress: '0x111111125421ca6dc452d289314280a0f8842a65',
@@ -15,7 +15,7 @@ export const SUPPORTED_NETWORKS: Record<number, NetworkConfig> = {
   },
 }
 
-export const DEFAULT_NETWORK_ID = 1
+export const DEFAULT_NETWORK_ID = 31337
 
 export function getNetworkConfig(chainId: number): NetworkConfig | null {
   return SUPPORTED_NETWORKS[chainId] || null

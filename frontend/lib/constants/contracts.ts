@@ -1,36 +1,61 @@
 import { type Address } from 'viem'
 
 // Contract addresses for different networks
-export interface ContractAddresses {
-  groth16Verifier: Address
-  hiddenParamPredicateZK: Address
-  aggregationRouterV6: Address
-}
-
-// Default contract addresses (will be overridden by deployed addresses)
-export const DEFAULT_CONTRACTS: Record<number, ContractAddresses> = {
-  // Localhost (forked mainnet)
-  1: {
-    groth16Verifier: '0x0000000000000000000000000000000000000000',
-    hiddenParamPredicateZK: '0x0000000000000000000000000000000000000000',
-    aggregationRouterV6: '0x111111125421ca6dc452d289314280a0f8842a65', // 1inch router on mainnet
+export const CONTRACT_ADDRESSES = {
+  localhost: {
+    chainId: 31337,
+    contracts: {
+      Groth16Verifier: "0xFEE2d383Ee292283eC43bdf0fa360296BE1e1149",
+      HiddenParamPredicateZK: "0xf0014CBe67b3aB638bdaA2e2Cb1B531935829E50",
+      AggregationRouterV6: "0x111111125421cA6dc452d289314280a0f8842A65"
+    }
   },
-}
+  hardhat: {
+    chainId: 31337,
+    contracts: {
+      Groth16Verifier: "",
+      HiddenParamPredicateZK: "",
+      AggregationRouterV6: "0x111111125421cA6dc452d289314280a0f8842A65"
+    }
+  }
+} as const
 
-// Token addresses
-export const TOKEN_ADDRESSES: Record<number, Record<string, Address>> = {
-  1: {
-    WETH: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
-    USDC: '0xA0b86a3E6441F6c1BF9c62c8C7A1E1a46a3e59e',
+// Token addresses for different networks
+export const TOKEN_ADDRESSES = {
+  WETH: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+  USDC: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+} as const
+
+// Token addresses by chain ID (for useNetwork hook)
+export const TOKEN_ADDRESSES_BY_CHAIN: Record<number, Record<string, string>> = {
+  31337: { // Updated to use the new chain ID
+    WETH: TOKEN_ADDRESSES.WETH,
+    USDC: TOKEN_ADDRESSES.USDC,
   },
+  1: { // Keep mainnet for reference
+    WETH: TOKEN_ADDRESSES.WETH,
+    USDC: TOKEN_ADDRESSES.USDC,
+  }
 }
 
-// Helper function to get contract addresses for a specific chain
-export function getContractAddresses(chainId: number): ContractAddresses {
-  return DEFAULT_CONTRACTS[chainId] || DEFAULT_CONTRACTS[1]
+// Get contract addresses for a specific network
+export function getContractAddresses(network: string) {
+  return CONTRACT_ADDRESSES[network as keyof typeof CONTRACT_ADDRESSES] || CONTRACT_ADDRESSES.localhost
 }
 
-// Helper function to get token addresses for a specific chain
-export function getTokenAddresses(chainId: number): Record<string, Address> {
-  return TOKEN_ADDRESSES[chainId] || TOKEN_ADDRESSES[1]
+// Get router address for a specific network
+export function getRouterAddress(network: string): string {
+  const addresses = getContractAddresses(network)
+  return addresses.contracts.AggregationRouterV6
+}
+
+// Get token addresses for a specific chain ID
+export function getTokenAddresses(chainId: number): Record<string, string> {
+  return TOKEN_ADDRESSES_BY_CHAIN[chainId] || TOKEN_ADDRESSES_BY_CHAIN[31337]
+}
+
+// Check if contracts are deployed for a network
+export function areContractsDeployed(network: string): boolean {
+  const addresses = getContractAddresses(network)
+  return !!(addresses.contracts.Groth16Verifier && addresses.contracts.HiddenParamPredicateZK)
 } 

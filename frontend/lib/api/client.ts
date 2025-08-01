@@ -111,13 +111,83 @@ export class DarkSwapAPIClient {
     }
 
     const endpoint = `/api/orders${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
-    const response = await this.makeRequest<PublishedOrder[]>(endpoint)
-    return response.data!
+    const response = await this.makeRequest<{
+      success: boolean
+      orders: any[]
+      pagination: any
+      filters: any
+      timestamp: string
+    }>(endpoint)
+    
+    // Extract the orders array from the nested response and transform to expected format
+    const orders = response.data?.orders || []
+    return orders.map(order => ({
+      id: order.id,
+      chainId: 31337, // Default for localhost
+      order: order.orderData, // Map orderData to order
+      signature: order.signature,
+      extension: order.orderData?.extension || '',
+      metadata: {
+        ...order.metadata,
+        makerToken: {
+          address: order.orderData?.makerAsset || order.metadata?.makerAsset,
+          symbol: order.orderData?.makerAsset === '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2' ? 'WETH' : 'UNKNOWN',
+          name: order.orderData?.makerAsset === '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2' ? 'Wrapped Ether' : 'Unknown Token',
+          decimals: order.orderData?.makerAsset === '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2' ? 18 : 18,
+        },
+        takerToken: {
+          address: order.orderData?.takerAsset || order.metadata?.takerAsset,
+          symbol: order.orderData?.takerAsset === '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' ? 'USDC' : 'UNKNOWN',
+          name: order.orderData?.takerAsset === '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' ? 'USD Coin' : 'Unknown Token',
+          decimals: order.orderData?.takerAsset === '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' ? 6 : 18,
+        },
+      },
+      secrets: order.secrets,
+      status: order.metadata?.status || 'active',
+      createdAt: order.metadata?.published ? new Date(order.metadata.published).getTime() : Date.now(),
+      updatedAt: order.metadata?.published ? new Date(order.metadata.published).getTime() : Date.now(),
+    }))
   }
 
   async getOrderById(orderId: string): Promise<PublishedOrder> {
-    const response = await this.makeRequest<PublishedOrder>(`/api/orders/${orderId}`)
-    return response.data!
+    const response = await this.makeRequest<{
+      success: boolean
+      order: any
+      timestamp: string
+    }>(`/api/orders/${orderId}`)
+    
+    const order = response.data?.order
+    if (!order) {
+      throw new Error('Order not found')
+    }
+    
+    // Transform to expected format
+    return {
+      id: order.id,
+      chainId: 31337, // Default for localhost
+      order: order.orderData, // Map orderData to order
+      signature: order.signature,
+      extension: order.orderData?.extension || '',
+      metadata: {
+        ...order.metadata,
+        makerToken: {
+          address: order.orderData?.makerAsset || order.metadata?.makerAsset,
+          symbol: order.orderData?.makerAsset === '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2' ? 'WETH' : 'UNKNOWN',
+          name: order.orderData?.makerAsset === '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2' ? 'Wrapped Ether' : 'Unknown Token',
+          decimals: order.orderData?.makerAsset === '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2' ? 18 : 18,
+        },
+        takerToken: {
+          address: order.orderData?.takerAsset || order.metadata?.takerAsset,
+          symbol: order.orderData?.takerAsset === '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' ? 'USDC' : 'UNKNOWN',
+          name: order.orderData?.takerAsset === '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' ? 'USD Coin' : 'Unknown Token',
+          decimals: order.orderData?.takerAsset === '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' ? 6 : 18,
+        },
+      },
+      secrets: order.secrets,
+      status: order.metadata?.status || 'active',
+      createdAt: order.metadata?.published ? new Date(order.metadata.published).getTime() : Date.now(),
+      updatedAt: order.metadata?.published ? new Date(order.metadata.published).getTime() : Date.now(),
+    }
   }
 
   async getActiveOrders(params: ActiveOrdersQueryParams): Promise<PublishedOrder[]> {
@@ -130,8 +200,42 @@ export class DarkSwapAPIClient {
     })
 
     const endpoint = `/api/orders/active/${params.network}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
-    const response = await this.makeRequest<PublishedOrder[]>(endpoint)
-    return response.data!
+    const response = await this.makeRequest<{
+      success: boolean
+      orders: any[]
+      network: string
+      count: number
+      timestamp: string
+    }>(endpoint)
+    
+    // Extract the orders array from the nested response and transform to expected format
+    const orders = response.data?.orders || []
+    return orders.map(order => ({
+      id: order.id,
+      chainId: 31337, // Default for localhost
+      order: order.orderData, // Map orderData to order
+      signature: order.signature,
+      extension: order.orderData?.extension || '',
+      metadata: {
+        ...order.metadata,
+        makerToken: {
+          address: order.orderData?.makerAsset || order.metadata?.makerAsset,
+          symbol: order.orderData?.makerAsset === '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2' ? 'WETH' : 'UNKNOWN',
+          name: order.orderData?.makerAsset === '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2' ? 'Wrapped Ether' : 'Unknown Token',
+          decimals: order.orderData?.makerAsset === '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2' ? 18 : 18,
+        },
+        takerToken: {
+          address: order.orderData?.takerAsset || order.metadata?.takerAsset,
+          symbol: order.orderData?.takerAsset === '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' ? 'USDC' : 'UNKNOWN',
+          name: order.orderData?.takerAsset === '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' ? 'USD Coin' : 'Unknown Token',
+          decimals: order.orderData?.takerAsset === '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' ? 6 : 18,
+        },
+      },
+      secrets: order.secrets,
+      status: order.metadata?.status || 'active',
+      createdAt: order.metadata?.published ? new Date(order.metadata.published).getTime() : Date.now(),
+      updatedAt: order.metadata?.published ? new Date(order.metadata.published).getTime() : Date.now(),
+    }))
   }
 
   async updateOrderStatus(orderId: string, request: UpdateOrderStatusRequest): Promise<void> {

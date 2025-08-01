@@ -10,13 +10,13 @@ export interface NetworkConfig {
 export const NETWORKS: Record<string, NetworkConfig> = {
   localhost: {
     url: "http://127.0.0.1:8545",
-    chainId: 1, // Matches forked mainnet chain ID
+    chainId: 31337, // Updated to match hardhat.config.ts
     routerAddress: "0x111111125421cA6dc452d289314280a0f8842A65", // 1inch AggregationRouterV6
     name: "localhost"
   },
   hardhat: {
     url: "hardhat",
-    chainId: 1, // Forked mainnet
+    chainId: 31337, // Updated to match hardhat.config.ts
     routerAddress: "0x111111125421cA6dc452d289314280a0f8842A65", // 1inch AggregationRouterV6
     name: "hardhat"
   }

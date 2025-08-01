@@ -16,7 +16,8 @@ export function useNetwork() {
   const networkConfig = getNetworkConfig(currentChainId)
   
   const contracts = useMemo(() => {
-    return getContractAddresses(currentChainId)
+    // Use 'localhost' as the network name for contract addresses
+    return getContractAddresses('localhost')
   }, [currentChainId])
 
   const tokens = useMemo(() => {

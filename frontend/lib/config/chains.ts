@@ -1,8 +1,8 @@
 import { Chain } from 'viem'
 
 export const localhost = {
-  id: 1, // Using mainnet fork chainId
-  name: 'Localhost',
+  id: 31337, // Custom chain ID for local development (Hardhat default)
+  name: 'DarkSwap Local (Forked Mainnet)',
   network: 'localhost',
   nativeCurrency: {
     decimals: 18,
