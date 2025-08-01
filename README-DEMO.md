@@ -27,7 +27,6 @@ npm install
 
 ```bash
 npx hardhat node --fork https://eth-mainnet.alchemyapi.io/v2/YOUR_KEY
-# Or use: npx hardhat node --fork https://eth-mainnet.alchemyapi.io/v2/cSkdeB3SYj--WFXjttF5sDiknxqX0U9B
 ```
 
 **Terminal 2: Commands** (run sequentially)
