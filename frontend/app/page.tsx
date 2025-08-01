@@ -1,8 +1,14 @@
 import Link from 'next/link'
+import { APIStatus } from '@/components/ui/APIStatus'
 
 export default function HomePage() {
   return (
     <div className="container mx-auto px-4 py-16 space-y-16">
+      {/* API Status Section */}
+      <section className="max-w-md mx-auto">
+        <APIStatus />
+      </section>
+
       {/* Hero Section */}
       <section className="text-center space-y-6">
         <div className="space-y-2">
