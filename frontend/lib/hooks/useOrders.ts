@@ -10,7 +10,7 @@ import {
   type CreateOrderRequest 
 } from '@/lib/api/types'
 import { 
-  type OrderStatus, 
+  OrderStatus, 
   type OrderMetadata, 
   type SecretParameters, 
   type OrderData 
@@ -242,12 +242,13 @@ export function useOrderAnalytics(orders: PublishedOrder[]) {
 export function useOrderFilters() {
   const [filters, setFilters] = useState({
     network: '',
-    status: undefined as OrderStatus | undefined,
+    status: undefined as typeof OrderStatus[keyof typeof OrderStatus] | undefined,
     makerAsset: undefined as Address | undefined,
     takerAsset: undefined as Address | undefined,
     maker: undefined as Address | undefined,
     minAmount: '',
     maxAmount: '',
+    searchQuery: '', // Add search query support
   })
 
   const updateFilter = <K extends keyof typeof filters>(
@@ -266,6 +267,7 @@ export function useOrderFilters() {
       maker: undefined,
       minAmount: '',
       maxAmount: '',
+      searchQuery: '', // Reset search query
     })
   }
 
@@ -280,3 +282,4 @@ export function useOrderFilters() {
     hasActiveFilters,
   }
 } 
+ 

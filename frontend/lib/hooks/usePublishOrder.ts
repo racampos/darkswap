@@ -4,7 +4,7 @@ import { apiClient } from '../api/client'
 import { getAPIBaseURL } from '../contracts/deployedAddresses'
 import { type CommitmentOrder } from '../contracts/commitmentOrders'
 import { type CreateOrderRequest, type PublishedOrder } from '../api/types'
-import { type OrderStatus } from '@/types'
+import { OrderStatus } from '@/types'
 
 interface PublishState {
   isPublishing: boolean
@@ -155,7 +155,7 @@ export function usePublishOrder() {
         extension: params.order.order.extension,
         metadata: createOrderRequest.metadata,
         secrets: createOrderRequest.secrets,
-        status: 'active' as const,
+        status: OrderStatus.ACTIVE,
         createdAt: Date.now(),
         updatedAt: Date.now(),
       }
