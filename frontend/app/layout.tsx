@@ -32,10 +32,7 @@ export const metadata: Metadata = {
     creator: '@darkswap',
   },
   viewport: 'width=device-width, initial-scale=1',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#0a0a0a' },
-  ],
+  themeColor: '#0a0a0a', // Dark mode only
 }
 
 export default function RootLayout({
@@ -44,14 +41,9 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="dark" suppressHydrationWarning>
       <body className={inter.className}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
+        <ThemeProvider>
           <QueryProvider>
             <Web3Provider>
               <div className="relative flex min-h-screen flex-col">

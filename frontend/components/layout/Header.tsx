@@ -3,7 +3,6 @@
 // import { ConnectButton } from '@rainbow-me/rainbowkit'
 import Link from 'next/link'
 import { Navigation } from './Navigation'
-// import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
 export function Header() {
   return (
@@ -20,7 +19,6 @@ export function Header() {
         </div>
         
         <div className="flex items-center space-x-4">
-          {/* <ThemeToggle /> */}
           <div className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm">
             Connect Wallet (Coming Soon)
           </div>
