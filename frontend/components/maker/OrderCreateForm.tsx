@@ -244,6 +244,12 @@ export function OrderCreateForm({ onSuccess, onError }: OrderCreateFormProps) {
 
   // Handle complete order creation workflow
   const handleCreateOrder = async (data: CreateOrderFormData) => {
+    // Only proceed if we're on the final step and user explicitly clicked Create Order
+    if (currentStep !== 3) {
+      console.log('Preventing premature form submission, current step:', currentStep)
+      return
+    }
+
     if (!createOrder.isConnected) {
       onError?.('Please connect your wallet first')
       return
@@ -301,6 +307,15 @@ export function OrderCreateForm({ onSuccess, onError }: OrderCreateFormProps) {
       setIsProcessing(false)
       setProcessingStep('')
     }
+  }
+
+  // Handle Create Order button click explicitly
+  const handleCreateOrderClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault() // Prevent any default behavior
+    console.log('Create Order button explicitly clicked')
+    
+    // Manually trigger form validation and submission
+    const isValid = await handleSubmit(handleCreateOrder)()
   }
 
   return (
@@ -371,20 +386,6 @@ export function OrderCreateForm({ onSuccess, onError }: OrderCreateFormProps) {
         </div>
       )}
 
-             {currentStep === 3 && (
-         <div className="space-y-6">
-           <div>
-             <h2 className="text-xl font-semibold mb-2">Review & Create</h2>
-             <p className="text-muted-foreground">Review your order details and create your privacy-preserving order</p>
-           </div>
-
-           <OrderPreview 
-             formData={watchedValues}
-             isValid={isFormActuallyValid}
-           />
-         </div>
-       )}
-
       {/* Navigation */}
       <div className="flex justify-between pt-6">
         {currentStep > 0 ? (
@@ -410,19 +411,10 @@ export function OrderCreateForm({ onSuccess, onError }: OrderCreateFormProps) {
           </Button>
         ) : (
           <Button 
-            type="submit"
+            type="button"
             disabled={!isFormActuallyValid || isProcessing || !createOrder.isConnected}
             className="min-w-[140px]"
-                         onClick={(e) => {
-               console.log('Create Order button clicked', {
-                 isFormActuallyValid,
-                 isProcessing,
-                 isConnected: createOrder.isConnected,
-                 formData: watchedValues,
-                 formErrors: errors
-               })
-               // Don't prevent default - let the form handle submission
-             }}
+            onClick={handleCreateOrderClick}
           >
             {isProcessing ? (
               <div className="flex items-center space-x-2">
