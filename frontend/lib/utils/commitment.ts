@@ -2,48 +2,48 @@
  * Frontend commitment calculation utilities
  */
 
+// Import the same poseidon-lite library used by the backend
+const { poseidon3 } = require("poseidon-lite");
+
 /**
  * Calculate Poseidon commitment from secret parameters
- * Note: This is a frontend implementation that communicates with the backend
- * for the actual Poseidon hash calculation
+ * This MUST match the ZK circuit's commitment calculation exactly
+ * Uses the same poseidon3([secretPrice, secretAmount, nonce]) as the backend
  */
 export function calculateCommitment(
   secretPrice: bigint,
   secretAmount: bigint,
   nonce: bigint
 ): string {
-  // For now, we'll use a simple hash function
-  // In production, this would call the backend for Poseidon hash calculation
-  // or use a WebAssembly implementation of Poseidon
-  
-  const values = [
-    secretPrice.toString(),
-    secretAmount.toString(),
-    nonce.toString()
-  ].join('|')
-  
-  // Simple hash for demonstration - replace with actual Poseidon
-  const hash = simpleHash(values)
-  return hash
+  try {
+    // Use the EXACT same Poseidon3 calculation as the backend
+    // This matches: poseidon3([secretPrice, secretAmount, nonce]) in src/utils/commitmentUtils.ts
+    const commitment = poseidon3([secretPrice, secretAmount, nonce]);
+    
+    // Return as string to match the backend interface
+    return commitment.toString();
+  } catch (error) {
+    console.error('Error calculating Poseidon commitment:', error);
+    throw new Error(`Failed to calculate commitment: ${error}`);
+  }
 }
 
 /**
- * Simple hash function for commitment calculation
- * This should be replaced with actual Poseidon hash
+ * Simple hash function for commitment calculation fallback
  */
 function simpleHash(input: string): string {
   let hash = BigInt(0)
   for (let i = 0; i < input.length; i++) {
     const charCode = BigInt(input.charCodeAt(i))
-    hash = ((hash << BigInt(5)) - hash + charCode) & ((BigInt(1) << BigInt(256)) - BigInt(1))
+    hash = ((hash << BigInt(5)) - hash + charCode) & BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
   }
   return hash.toString()
 }
 
 /**
- * Validate commitment parameters
+ * Validate secret parameters
  */
-export function validateCommitmentParams(
+export function validateSecretParameters(
   secretPrice: bigint,
   secretAmount: bigint,
   nonce: bigint
@@ -98,4 +98,4 @@ export function verifyCommitment(
 ): boolean {
   const calculatedCommitment = calculateCommitment(secretPrice, secretAmount, nonce)
   return commitment === calculatedCommitment
-} 
+}

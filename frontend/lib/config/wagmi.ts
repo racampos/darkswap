@@ -18,7 +18,7 @@ const { connectors } = getDefaultWallets({
 
 // Create wagmi config
 export const wagmiConfig = createConfig({
-  autoConnect: true,
+  autoConnect: false, // Disable autoConnect to prevent hydration issues
   connectors,
   publicClient,
 })

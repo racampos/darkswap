@@ -3,6 +3,22 @@ import fs from "fs";
 import path from "path";
 import { getCurrentNetwork } from "./utils/networkConfig";
 
+// Wallet addresses to fund
+const MAKER_ADDRESS = "0x6061B722Bc93b604E3733Ef8738716276939158B";
+const TAKER_ADDRESS = "0xCe68Cc3c23804ab1A1AEF354Ba7c3De9D10adfEe";
+
+// Token addresses (mainnet)
+const WETH_ADDRESS = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+const USDC_ADDRESS = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+
+// Whale addresses for funding
+const WETH_WHALE = "0x8EB8a3b98659Cce290402893d0123abb75E3ab28";
+const USDC_WHALE = "0x47ac0Fb4F2D84898e4D9E7b4DaB3C24507a6D503";
+
+// Funding amounts
+const MAKER_WETH_AMOUNT = ethers.parseEther("50"); // 50 WETH for maker
+const TAKER_USDC_AMOUNT = BigInt("100000000000"); // 100,000 USDC for taker (6 decimals)
+
 interface DeployedContracts {
   Groth16Verifier: string;
   HiddenParamPredicateZK: string;
@@ -79,6 +95,50 @@ async function verifyDeployment(contracts: DeployedContracts): Promise<void> {
   }
 }
 
+async function fundWallets(): Promise<void> {
+  console.log("\n💰 Funding Maker and Taker wallets...");
+  
+  // Impersonate whale accounts
+  await ethers.provider.send("hardhat_impersonateAccount", [WETH_WHALE]);
+  await ethers.provider.send("hardhat_impersonateAccount", [USDC_WHALE]);
+  
+  const wethWhale = await ethers.getSigner(WETH_WHALE);
+  const usdcWhale = await ethers.getSigner(USDC_WHALE);
+  
+  // Get token contracts
+  const wethContract = await ethers.getContractAt("MockERC20", WETH_ADDRESS);
+  const usdcContract = await ethers.getContractAt("MockERC20", USDC_ADDRESS);
+  
+  try {
+    // Fund Maker with WETH
+    console.log(`🔄 Funding Maker (${MAKER_ADDRESS}) with ${ethers.formatEther(MAKER_WETH_AMOUNT)} WETH...`);
+    await wethContract.connect(wethWhale).transfer(MAKER_ADDRESS, MAKER_WETH_AMOUNT);
+    
+    // Fund Taker with USDC  
+    console.log(`🔄 Funding Taker (${TAKER_ADDRESS}) with ${Number(TAKER_USDC_AMOUNT) / 1e6} USDC...`);
+    await usdcContract.connect(usdcWhale).transfer(TAKER_ADDRESS, TAKER_USDC_AMOUNT);
+    
+    // Verify balances
+    const makerWethBalance = await wethContract.balanceOf(MAKER_ADDRESS);
+    const takerUsdcBalance = await usdcContract.balanceOf(TAKER_ADDRESS);
+    
+    console.log(`✅ Maker WETH balance: ${ethers.formatEther(makerWethBalance)} WETH`);
+    console.log(`✅ Taker USDC balance: ${Number(takerUsdcBalance) / 1e6} USDC`);
+    
+    // Approve router to spend tokens (for convenience)
+    console.log("🔄 Pre-approving router for token spending...");
+    
+    // Note: We can't sign transactions for these addresses without their private keys
+    // Users will need to approve the router themselves in their wallets
+    console.log("⚠️  Users will need to approve the 1inch router in their wallets before trading");
+    
+  } finally {
+    // Stop impersonating accounts
+    await ethers.provider.send("hardhat_stopImpersonatingAccount", [WETH_WHALE]);
+    await ethers.provider.send("hardhat_stopImpersonatingAccount", [USDC_WHALE]);
+  }
+}
+
 async function main() {
   try {
     console.log("🚀 Starting deployment process...");
@@ -103,6 +163,9 @@ async function main() {
     
     // Verify deployment
     await verifyDeployment(contracts);
+
+    // Fund wallets
+    await fundWallets();
     
     // Load and update config
     const config = await loadDeploymentConfig();

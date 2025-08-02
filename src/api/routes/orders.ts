@@ -52,6 +52,7 @@ export interface CreateOrderRequest {
     secretAmount: number;
     nonce: number;
   };
+  commitment: string; // Added commitment to the interface
 }
 
 export interface RegisterSecretsRequest {
@@ -138,8 +139,19 @@ export function ordersRouter(makerService: MakerService): Router {
       console.log(`   Making: ${orderRequest.order.makingAmount} ${orderRequest.metadata.makerToken.symbol}`);
       console.log(`   Taking: ${orderRequest.order.takingAmount} ${orderRequest.metadata.takerToken.symbol}`);
 
-      // Calculate commitment hash for the order (simplified)
-      const commitment = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+      // Use the commitment from the frontend (calculated with Poseidon hash)
+      // This maintains consistency with the ZK proof verification
+      const commitment = orderRequest.commitment;
+      
+      if (!commitment) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing commitment in order request',
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      console.log(`   Using frontend commitment: ${commitment}`);
 
       // Convert the request to match the storage module's CreateOrderRequest format
       const storageRequest = {
@@ -172,6 +184,40 @@ export function ordersRouter(makerService: MakerService): Router {
       }
 
       console.log(`✅ Order created and published successfully: ${result.orderId}`);
+
+      // IMPORTANT: Also register the order with makerService for ZK authorization
+      // This links the order ID to the ZK parameters for fill authorization
+      try {
+        console.log(`🔍 Debug - Registering order with makerService:`);
+        console.log(`   Order ID: ${result.orderId}`);
+        console.log(`   Commitment from frontend: ${commitment}`);
+        console.log(`   Commitment type: ${typeof commitment}`);
+        
+        makerService.registerOrder(
+          commitment,
+          {
+            maker: orderRequest.order.maker,
+            makerAsset: orderRequest.order.makerAsset,
+            takerAsset: orderRequest.order.takerAsset,
+            makingAmount: BigInt(orderRequest.order.makingAmount),
+            takingAmount: BigInt(orderRequest.order.takingAmount),
+            originalSalt: orderRequest.order.salt.toString(),
+            commitment: commitment
+          },
+          {
+            secretPrice: BigInt(orderRequest.secrets.secretPrice),
+            secretAmount: BigInt(orderRequest.secrets.secretAmount),
+            nonce: BigInt(orderRequest.secrets.nonce),
+            maker: orderRequest.order.maker
+          },
+          result.orderId // Use the generated order ID as the lookup key
+        );
+        
+        console.log(`✅ Order ZK parameters registered for authorization: ${result.orderId}`);
+      } catch (regError: any) {
+        console.error(`⚠️  Failed to register ZK parameters (order still published):`, regError);
+        // Don't fail the entire request - the order is published, just authorization might not work
+      }
 
       // BigInt replacer function for JSON serialization
       const bigIntReplacer = (key: string, value: any) => {

@@ -36,6 +36,7 @@ export interface CreateOrderRequest {
   order: OrderData
   signature: string
   extension?: string
+  commitment: string
   metadata: OrderMetadata
   secrets: SecretParameters
 }
@@ -113,4 +114,6 @@ export interface NetworkStatus {
   isHealthy: boolean
   lastUpdate: number
 } 
+ 
+ 
  

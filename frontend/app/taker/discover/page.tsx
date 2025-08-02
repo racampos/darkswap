@@ -1,48 +1,68 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { useOrderDiscovery, useOrderFilters } from '@/lib/hooks/useOrders'
 import { OrderBrowser } from '@/components/taker/OrderBrowser'
 import { OrderSearch } from '@/components/taker/OrderSearch'
 import { OrderFilters } from '@/components/taker/OrderFilters'
 import { OrderDetails } from '@/components/taker/OrderDetails'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { useOrderDiscovery, useOrderFilters } from '@/lib/hooks/useOrders'
+import { Badge } from '@/components/ui/Badge'
 import { useAccount } from 'wagmi'
 
-function DiscoverPageContent() {
+export default function DiscoverPage() {
+  const [mounted, setMounted] = useState(false)
+  const [selectedOrder, setSelectedOrder] = useState<string | null>(null)
+  
   const { address } = useAccount()
   const searchParams = useSearchParams()
-  const selectedOrderId = searchParams.get('order')
-  
-  const [showDetails, setShowDetails] = useState(!!selectedOrderId)
-  const [selectedOrder, setSelectedOrder] = useState<string | null>(selectedOrderId)
   
   const { filters, updateFilter, clearFilters, hasActiveFilters } = useOrderFilters()
   const { data: orders = [], isLoading, error, refetch } = useOrderDiscovery({
     ...filters,
-    network: filters.network || 'localhost', // Use filters.network or default to localhost
+    network: filters.network || 'localhost',
     limit: 20
   })
 
-  // Create a type-compatible wrapper for updateFilter
-  const handleFilterChange = <K extends keyof typeof filters>(key: K, value: typeof filters[K]) => {
-    updateFilter(key, value)
-  }
+  // Prevent hydration mismatches
+  useEffect(() => {
+    setMounted(true)
+    
+    // Handle URL search params after mounting
+    const orderParam = searchParams.get('order')
+    if (orderParam) {
+      setSelectedOrder(orderParam)
+    }
+  }, [searchParams])
+
+  // Memoize the search handler to prevent infinite re-renders
+  const handleSearchChange = useCallback((query: string) => {
+    updateFilter('searchQuery', query)
+  }, [updateFilter])
 
   const handleOrderSelect = (orderId: string) => {
     setSelectedOrder(orderId)
-    setShowDetails(true)
   }
 
   const handleCloseDetails = () => {
-    setShowDetails(false)
     setSelectedOrder(null)
-    // Update URL without the order parameter
-    window.history.replaceState({}, '', '/taker/discover')
   }
 
+  // Show loading state until mounted
+  if (!mounted) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center py-12">
+          <div className="text-2xl mb-2">⏳</div>
+          <p className="text-muted-foreground">Loading order discovery...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show wallet connection prompt if not connected
   if (!address) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -86,7 +106,7 @@ function DiscoverPageContent() {
         <Card className="p-6 bg-card">
           <div className="space-y-4">
             <OrderSearch
-              onSearchChange={(query) => updateFilter('searchQuery', query)}
+              onSearchChange={handleSearchChange}
               placeholder="Search by token symbol, address, or order ID..."
             />
             
@@ -134,31 +154,12 @@ function DiscoverPageContent() {
       />
 
       {/* Order Details Modal/Dialog */}
-      {showDetails && selectedOrder && (
+      {selectedOrder && (
         <OrderDetails
           orderId={selectedOrder}
           onClose={handleCloseDetails}
-          onFillOrder={(orderId) => {
-            // Navigate to order execution page (commit 7)
-            window.location.href = `/taker/fill/${orderId}`
-          }}
         />
       )}
     </div>
-  )
-}
-
-export default function DiscoverPage() {
-  return (
-    <Suspense fallback={
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-12">
-          <div className="text-2xl mb-2">⏳</div>
-          <p className="text-muted-foreground">Loading order discovery...</p>
-        </div>
-      </div>
-    }>
-      <DiscoverPageContent />
-    </Suspense>
   )
 } 

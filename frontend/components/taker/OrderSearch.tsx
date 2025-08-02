@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 
@@ -17,6 +17,10 @@ export function OrderSearch({
 }: OrderSearchProps) {
   const [searchQuery, setSearchQuery] = useState(defaultValue)
   const [debouncedQuery, setDebouncedQuery] = useState(defaultValue)
+  
+  // Use ref to always have the latest callback
+  const onSearchChangeRef = useRef(onSearchChange)
+  onSearchChangeRef.current = onSearchChange
 
   // Debounce search input to avoid too many API calls
   useEffect(() => {
@@ -29,12 +33,12 @@ export function OrderSearch({
 
   // Call onSearchChange when debounced query changes
   useEffect(() => {
-    onSearchChange(debouncedQuery)
-  }, [debouncedQuery, onSearchChange])
+    onSearchChangeRef.current(debouncedQuery)
+  }, [debouncedQuery])
 
   const handleClear = () => {
     setSearchQuery('')
-    onSearchChange('')
+    onSearchChangeRef.current('')
   }
 
   return (

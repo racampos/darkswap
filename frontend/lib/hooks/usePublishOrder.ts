@@ -88,7 +88,7 @@ export function usePublishOrder() {
 
       // Step 2: Publish order to storage
       const createOrderRequest: CreateOrderRequest = {
-        chainId: chainId || 31337,
+        chainId: chainId,
         order: {
           salt: params.order.order.salt.toString(),
           maker: params.order.order.maker,
@@ -101,6 +101,7 @@ export function usePublishOrder() {
         },
         signature: params.signature,
         extension: params.order.order.extension,
+        commitment: params.order.commitment, // ✅ Include the frontend-calculated commitment
         metadata: {
           makerToken: {
             address: params.order.order.makerAsset,

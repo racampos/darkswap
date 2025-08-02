@@ -68,6 +68,7 @@ export class OrdersAPI {
     signature: string,
     metadata: OrderMetadata,
     secrets: SecretParameters,
+    commitment: string,
     chainId = 1,
     extension?: string
   ): Promise<PublishedOrder> {
@@ -76,6 +77,7 @@ export class OrdersAPI {
       order,
       signature,
       extension,
+      commitment,
       metadata,
       secrets,
     }
@@ -194,4 +196,6 @@ export class OrdersAPI {
 
 // Export the static class for convenience
 export const ordersAPI = OrdersAPI 
+ 
+ 
  

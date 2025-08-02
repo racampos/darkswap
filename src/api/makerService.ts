@@ -116,12 +116,19 @@ export class MakerService {
    * Register order parameters and secrets for a commitment
    */
   public registerOrder(commitment: string, orderParams: OrderParameters, secrets: SecretParameters, orderHash?: string): void {
+    console.log(`🔍 MakerService.registerOrder called:`);
+    console.log(`   Commitment key: ${commitment}`);
+    console.log(`   OrderParams.commitment: ${orderParams.commitment}`);
+    console.log(`   OrderHash: ${orderHash}`);
+    
     this.orderParamsDatabase.set(commitment, orderParams);
     this.secretsDatabase.set(commitment, secrets);
     
     // Also register by orderHash if provided (for authorizeFillRequest lookup)
     if (orderHash) {
+      console.log(`   Storing orderParams by orderHash: ${orderHash}`);
       this.orderParamsDatabase.set(orderHash, orderParams);
+      console.log(`   Stored orderParams.commitment: ${orderParams.commitment}`);
     }
   }
 
@@ -276,6 +283,7 @@ export class MakerService {
   }> {
     try {
       // Look up order parameters by order hash
+      console.log(`🔍 Looking up order parameters for orderHash: ${orderHash}`);
       const orderParams = this.orderParamsDatabase.get(orderHash);
       if (!orderParams) {
         return {
@@ -283,10 +291,22 @@ export class MakerService {
           error: 'Order not found - no parameters registered for this hash'
         };
       }
+      
+      console.log(`🔍 Retrieved orderParams:`);
+      console.log(`   orderParams.commitment: ${orderParams.commitment}`);
+      console.log(`   orderParams.maker: ${orderParams.maker}`);
 
-      // Extract commitment from order
-      const commitment = BigInt(orderParams.commitment);
-      const commitmentStr = commitment.toString();
+      // Extract commitment from order - handle both string and numeric formats
+      let commitmentStr: string;
+      try {
+        // Try to convert to BigInt first (new numeric format)
+        const commitment = BigInt(orderParams.commitment);
+        commitmentStr = commitment.toString();
+      } catch (conversionError) {
+        // If conversion fails, use the string directly (old format)
+        commitmentStr = orderParams.commitment;
+        console.log(`   Using string commitment directly: ${commitmentStr}`);
+      }
       
       console.log(`   Extracted Commitment: ${commitmentStr}`);
 
@@ -322,7 +342,7 @@ export class MakerService {
 
       // Generate ZK proof for this fill
       console.log(`   Generating ZK proof...`);
-      const proofResult = await this.generateZKProof(secrets, BigInt(fillAmountNumber), commitment);
+      const proofResult = await this.generateZKProof(secrets, BigInt(fillAmountNumber), BigInt(orderParams.commitment));
       
       if (!proofResult.success) {
         return {
@@ -378,9 +398,17 @@ export class MakerService {
       console.log(`   Fill Amount: ${request.fillAmount} wei`);
       console.log(`   Taker: ${request.taker}`);
 
-      // Extract commitment from order
-      const commitment = BigInt(request.orderParams.commitment);
-      const commitmentStr = commitment.toString();
+      // Extract commitment from order - handle both string and numeric formats
+      let commitmentStr: string;
+      try {
+        // Try to convert to BigInt first (new numeric format)
+        const commitment = BigInt(request.orderParams.commitment);
+        commitmentStr = commitment.toString();
+      } catch (conversionError) {
+        // If conversion fails, use the string directly (old format)
+        commitmentStr = request.orderParams.commitment;
+        console.log(`   Using string commitment directly: ${commitmentStr}`);
+      }
       
       console.log(`   Extracted Commitment: ${commitmentStr}`);
 
@@ -421,7 +449,7 @@ export class MakerService {
 
       // Generate ZK proof for this fill
       console.log(`   Generating ZK proof...`);
-      const proofResult = await this.generateZKProof(secrets, request.fillAmount, commitment);
+      const proofResult = await this.generateZKProof(secrets, request.fillAmount, BigInt(request.orderParams.commitment));
       
       if (!proofResult.success) {
         console.log(`   ZK proof generation failed: ${proofResult.error}`);

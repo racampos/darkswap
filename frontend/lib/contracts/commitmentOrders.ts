@@ -157,6 +157,11 @@ export function validateCommitmentOrder(params: CommitmentOrderParams): {
     errors.push("Secret amount must be positive")
   }
 
+  // Business logic validation: secret minimum must be achievable
+  if (params.secretParams.secretPrice > params.takingAmount) {
+    errors.push(`Secret minimum (${params.secretParams.secretPrice.toString()}) cannot exceed order total (${params.takingAmount.toString()})`)
+  }
+
   return {
     isValid: errors.length === 0,
     errors

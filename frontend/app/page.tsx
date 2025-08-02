@@ -1,12 +1,31 @@
 import Link from 'next/link'
 import { APIStatus } from '@/components/ui/APIStatus'
+import { ClientOnly } from '@/lib/utils/clientOnly'
 
 export default function HomePage() {
   return (
     <div className="container mx-auto px-4 py-16 space-y-16">
       {/* API Status Section */}
       <section className="max-w-md mx-auto">
-        <APIStatus />
+        <ClientOnly fallback={
+          <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
+            <div className="flex flex-col space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">System Status</span>
+                <button className="text-xs text-blue-600 hover:text-blue-800">
+                  Refresh
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-blue-100 text-blue-800 border-blue-200">
+                  Loading...
+                </span>
+              </div>
+            </div>
+          </div>
+        }>
+          <APIStatus />
+        </ClientOnly>
       </section>
 
       {/* Hero Section */}

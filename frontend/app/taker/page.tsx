@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -8,10 +9,16 @@ import { useAccount } from 'wagmi'
 
 export default function TakerPage() {
   const { address } = useAccount()
-  const { data: recentOrders = [], isLoading } = useOrderDiscovery({ 
+  const [mounted, setMounted] = useState(false)
+  const { data: recentOrders = [], isLoading } = useOrderDiscovery({
     network: 'localhost',
-    limit: 3 
+    limit: 10
   })
+
+  // Prevent hydration mismatches
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const activeOrdersCount = recentOrders.filter(order => order.status === 'active').length
 
@@ -41,21 +48,21 @@ export default function TakerPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
         <Card className="p-6 text-center bg-card">
           <div className="text-3xl font-bold text-foreground mb-2">
-            {isLoading ? '...' : activeOrdersCount}
+            {!mounted ? '...' : isLoading ? '...' : activeOrdersCount}
           </div>
           <div className="text-muted-foreground">Active Orders</div>
         </Card>
         
         <Card className="p-6 text-center bg-card">
           <div className="text-3xl font-bold text-foreground mb-2">
-            {isLoading ? '...' : recentOrders.length}
+            {!mounted ? '...' : isLoading ? '...' : recentOrders.length}
           </div>
           <div className="text-muted-foreground">Total Orders</div>
         </Card>
         
         <Card className="p-6 text-center bg-card">
           <div className="text-3xl font-bold text-foreground mb-2">
-            {address ? '✓' : '✗'}
+            {!mounted ? '...' : address ? '✓' : '○'}
           </div>
           <div className="text-muted-foreground">Wallet Status</div>
         </Card>
@@ -99,35 +106,35 @@ export default function TakerPage() {
       </div>
 
       {/* Recent Orders Preview */}
-      <div className="mb-8">
+      <div className="mb-12">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-semibold text-foreground">Recent Orders</h2>
           <Button 
-            variant="outline" 
+            variant="ghost" 
             onClick={() => window.location.href = '/taker/discover'}
+            className="text-blue-400 hover:text-blue-300"
           >
-            View All
+            View All →
           </Button>
         </div>
 
-        {isLoading ? (
+        {!mounted || isLoading ? (
           <div className="text-center py-8">
-            <div className="text-2xl mb-2">⏳</div>
-            <p className="text-muted-foreground">Loading recent orders...</p>
+            <div className="text-muted-foreground">Loading orders...</div>
           </div>
         ) : recentOrders.length === 0 ? (
-          <Card className="p-8 text-center bg-card">
-            <div className="text-4xl mb-4">📭</div>
-            <h3 className="text-lg font-semibold text-foreground mb-2">No orders available</h3>
-            <p className="text-muted-foreground">
-              There are currently no active orders. Check back later or create some orders as a maker!
-            </p>
-          </Card>
+          <div className="text-center py-8">
+            <div className="text-muted-foreground mb-4">No orders available yet</div>
+            <Button onClick={() => window.location.href = '/maker/create'}>
+              Create Your First Order
+            </Button>
+          </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {recentOrders.slice(0, 3).map((order) => {
-              const makerSymbol = order.metadata?.makerToken?.symbol || 'UNKNOWN'
-              const takerSymbol = order.metadata?.takerToken?.symbol || 'UNKNOWN'
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {recentOrders.slice(0, 3).map(order => {
+              // Parse token symbols safely
+              const makerSymbol = order.metadata?.makerToken?.symbol || 'TOKEN'
+              const takerSymbol = order.metadata?.takerToken?.symbol || 'TOKEN'
               
               return (
                 <Card key={order.id} className="p-4 bg-card hover:shadow-md transition-shadow">

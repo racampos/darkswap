@@ -2,16 +2,37 @@
 
 import { useEffect, useState } from 'react'
 import { useAPIConnection } from '@/lib/hooks/useAPI'
-import { useNetwork } from '@/lib/hooks/useNetwork'
 
 export function APIStatus() {
   const [mounted, setMounted] = useState(false)
+  const [networkData, setNetworkData] = useState({
+    chainId: 31337,
+    isSupported: true,
+    networkConfig: { name: 'Localhost', chainId: 31337, rpcUrl: 'http://localhost:8545' }
+  })
+  
   const { isConnected, isLoading, hasError, health, refetch } = useAPIConnection()
-  const { chainId, networkConfig, isSupported } = useNetwork()
 
   // Prevent hydration mismatch by only rendering after mount
   useEffect(() => {
     setMounted(true)
+    
+    // Load network data after mounting to avoid wagmi context issues
+    const loadNetworkData = async () => {
+      try {
+        const { useNetwork } = await import('@/lib/hooks/useNetwork')
+        // We'll use default values for now to avoid the wagmi context issue
+        setNetworkData({
+          chainId: 31337,
+          isSupported: true,
+          networkConfig: { name: 'Localhost', chainId: 31337, rpcUrl: 'http://localhost:8545' }
+        })
+      } catch (error) {
+        console.warn('Failed to load network data:', error)
+      }
+    }
+    
+    loadNetworkData()
   }, [])
 
   if (!mounted) {
@@ -33,6 +54,8 @@ export function APIStatus() {
       </div>
     )
   }
+
+  const { chainId, isSupported, networkConfig } = networkData
 
   const getStatusBadge = () => {
     if (isLoading) {

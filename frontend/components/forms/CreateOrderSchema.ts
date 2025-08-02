@@ -73,25 +73,13 @@ export const CreateOrderSchema = z.object({
   message: 'Expiration date is required when order expires',
   path: ['expiration'],
 }).refine((data) => {
-  // Calculate the implied exchange rate
-  const makingAmount = parseFloat(data.makingAmount)
+  // Validate that secret price (total amount) does not exceed order total
   const takingAmount = parseFloat(data.takingAmount)
-  const impliedPrice = takingAmount / makingAmount
-  
-  // Validate that secret price is not higher than implied price
   const secretPrice = parseFloat(data.secrets.secretPrice)
-  return secretPrice <= impliedPrice
+  return secretPrice <= takingAmount
 }, {
-  message: 'Secret minimum price cannot be higher than your implied exchange rate',
+  message: 'Secret minimum amount cannot exceed the total order value',
   path: ['secrets', 'secretPrice'],
-}).refine((data) => {
-  // Validate that secret amount is not higher than making amount
-  const makingAmount = parseFloat(data.makingAmount)
-  const secretAmount = parseFloat(data.secrets.secretAmount)
-  return secretAmount <= makingAmount
-}, {
-  message: 'Secret minimum amount cannot be higher than making amount',
-  path: ['secrets', 'secretAmount'],
 })
 
 export type CreateOrderFormData = z.infer<typeof CreateOrderSchema>

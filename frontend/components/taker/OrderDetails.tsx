@@ -1,20 +1,24 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { formatUnits } from 'viem'
 import { useOrder } from '@/lib/hooks/useOrders'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { FillOrderDialog } from './FillOrderDialog'
+import { canFillOrder } from '@/lib/utils/orderExecution'
+import { useAccount } from 'wagmi'
 
 interface OrderDetailsProps {
   orderId: string
   onClose: () => void
-  onFillOrder: (orderId: string) => void
 }
 
-export function OrderDetails({ orderId, onClose, onFillOrder }: OrderDetailsProps) {
+export function OrderDetails({ orderId, onClose }: OrderDetailsProps) {
+  const { address } = useAccount()
   const { data: order, isLoading, error } = useOrder(orderId)
+  const [showFillDialog, setShowFillDialog] = useState(false)
 
   // Close on Escape key
   useEffect(() => {
@@ -240,8 +244,7 @@ export function OrderDetails({ orderId, onClose, onFillOrder }: OrderDetailsProp
                 {order.status === 'active' && (
                   <Button
                     onClick={() => {
-                      onFillOrder(order.id)
-                      onClose()
+                      setShowFillDialog(true)
                     }}
                     className="flex-1"
                   >
@@ -262,6 +265,14 @@ export function OrderDetails({ orderId, onClose, onFillOrder }: OrderDetailsProp
           )}
         </div>
       </Card>
+
+      {showFillDialog && order && (
+        <FillOrderDialog
+          isOpen={showFillDialog}
+          onClose={() => setShowFillDialog(false)}
+          order={order}
+        />
+      )}
     </div>
   )
 } 

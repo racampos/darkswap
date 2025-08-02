@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { type Address } from 'viem'
 import { OrdersAPI } from '@/lib/api/orders'
@@ -128,6 +128,7 @@ export function useOrderPublishing() {
       signature,
       metadata,
       secrets,
+      commitment,
       chainId = 1,
       extension,
     }: {
@@ -135,10 +136,11 @@ export function useOrderPublishing() {
       signature: string
       metadata: OrderMetadata
       secrets: SecretParameters
+      commitment: string
       chainId?: number
       extension?: string
     }) => {
-      return OrdersAPI.publishOrder(order, signature, metadata, secrets, chainId, extension)
+      return OrdersAPI.publishOrder(order, signature, metadata, secrets, commitment, chainId, extension)
     },
     onSuccess: (newOrder, variables) => {
       // Invalidate and refetch relevant queries
@@ -251,14 +253,14 @@ export function useOrderFilters() {
     searchQuery: '', // Add search query support
   })
 
-  const updateFilter = <K extends keyof typeof filters>(
+  const updateFilter = useCallback(<K extends keyof typeof filters>(
     key: K,
     value: typeof filters[K]
   ) => {
     setFilters(prev => ({ ...prev, [key]: value }))
-  }
+  }, [])
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setFilters({
       network: '',
       status: undefined,
@@ -269,7 +271,7 @@ export function useOrderFilters() {
       maxAmount: '',
       searchQuery: '', // Reset search query
     })
-  }
+  }, [])
 
   const hasActiveFilters = Object.values(filters).some(value => 
     value !== undefined && value !== ''
