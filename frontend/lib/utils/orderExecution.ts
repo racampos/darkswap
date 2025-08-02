@@ -76,9 +76,14 @@ export function validateFillAmount(
     }
     
     if (amount > maxAmount) {
+      // Convert maxAmount to human-readable for error message
+      const takerDecimals = order.metadata.takerToken?.decimals || 6
+      const maxAmountHuman = Number(maxAmount) / Math.pow(10, takerDecimals)
+      const tokenSymbol = order.metadata.takerToken?.symbol || 'TOKEN'
+      
       return {
         isValid: false,
-        error: `Fill amount exceeds maximum (${maxAmount.toString()})`,
+        error: `Fill amount exceeds maximum (${maxAmountHuman.toFixed(4)} ${tokenSymbol})`,
         maxAmount,
         suggestedAmount: maxAmount
       }
@@ -116,8 +121,15 @@ export function calculateOutputAmount(
     // Calculate proportional output
     const outputAmount = (fillAmountBN * makingAmount) / takingAmount
     
-    // Calculate rate (maker tokens per taker token)
-    const rate = Number(makingAmount) / Number(takingAmount)
+    // Calculate rate using human-readable amounts (accounting for token decimals)
+    const makerDecimals = order.metadata.makerToken?.decimals || 18
+    const takerDecimals = order.metadata.takerToken?.decimals || 6
+    
+    const makingAmountHuman = Number(makingAmount) / Math.pow(10, makerDecimals)
+    const takingAmountHuman = Number(takingAmount) / Math.pow(10, takerDecimals)
+    
+    // Rate = takerTokens per makerToken (e.g., USDC per WETH)
+    const rate = takingAmountHuman / makingAmountHuman
     
     // For limit orders, price impact is typically 0
     const priceImpact = 0

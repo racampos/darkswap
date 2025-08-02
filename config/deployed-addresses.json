@@ -1,12 +1,12 @@
 {
   "networks": {
     "localhost": {
-      "chainId": 31337,
+      "chainId": 1,
       "contracts": {
-        "Groth16Verifier": "0xFEE2d383Ee292283eC43bdf0fa360296BE1e1149",
-        "HiddenParamPredicateZK": "0xf0014CBe67b3aB638bdaA2e2Cb1B531935829E50"
+        "Groth16Verifier": "0xE3e7A4B35574Ce4b9Bc661cD93e8804Da548932a",
+        "HiddenParamPredicateZK": "0xE1165C689C0c3e9642cA7606F5287e708d846206"
       },
-      "deployedAt": "2025-08-01T22:16:12.446Z",
+      "deployedAt": "2025-08-02T21:01:03.324Z",
       "deploymentTxHash": ""
     },
     "hardhat": {

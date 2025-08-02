@@ -3,9 +3,10 @@ import { type OrderStruct } from '../contracts/commitmentOrders'
 
 /**
  * EIP-712 domain and types for 1inch order signing
+ * Must match exactly with backend/test helpers
  */
 export const ORDER_DOMAIN = {
-  name: 'AggregationRouter',
+  name: '1inch Aggregation Router',  // ✅ Fixed to match backend exactly
   version: '6',
   // chainId and verifyingContract will be set dynamically
 } as const

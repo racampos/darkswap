@@ -18,6 +18,7 @@ const USDC_WHALE = "0x47ac0Fb4F2D84898e4D9E7b4DaB3C24507a6D503";
 // Funding amounts
 const MAKER_WETH_AMOUNT = ethers.parseEther("50"); // 50 WETH for maker
 const TAKER_USDC_AMOUNT = BigInt("100000000000"); // 100,000 USDC for taker (6 decimals)
+const ETH_FUNDING_AMOUNT = ethers.parseEther("2.0"); // 2 ETH for gas fees
 
 interface DeployedContracts {
   Groth16Verifier: string;
@@ -98,7 +99,10 @@ async function verifyDeployment(contracts: DeployedContracts): Promise<void> {
 async function fundWallets(): Promise<void> {
   console.log("\n💰 Funding Maker and Taker wallets...");
   
-  // Impersonate whale accounts
+  // Get deployer for ETH transfers
+  const [deployer] = await ethers.getSigners();
+  
+  // Impersonate whale accounts for token transfers
   await ethers.provider.send("hardhat_impersonateAccount", [WETH_WHALE]);
   await ethers.provider.send("hardhat_impersonateAccount", [USDC_WHALE]);
   
@@ -110,6 +114,19 @@ async function fundWallets(): Promise<void> {
   const usdcContract = await ethers.getContractAt("MockERC20", USDC_ADDRESS);
   
   try {
+    // Fund accounts with ETH for gas fees
+    console.log(`🔄 Funding Maker (${MAKER_ADDRESS}) with ${ethers.formatEther(ETH_FUNDING_AMOUNT)} ETH for gas...`);
+    await deployer.sendTransaction({
+      to: MAKER_ADDRESS,
+      value: ETH_FUNDING_AMOUNT
+    });
+    
+    console.log(`🔄 Funding Taker (${TAKER_ADDRESS}) with ${ethers.formatEther(ETH_FUNDING_AMOUNT)} ETH for gas...`);
+    await deployer.sendTransaction({
+      to: TAKER_ADDRESS,
+      value: ETH_FUNDING_AMOUNT
+    });
+    
     // Fund Maker with WETH
     console.log(`🔄 Funding Maker (${MAKER_ADDRESS}) with ${ethers.formatEther(MAKER_WETH_AMOUNT)} WETH...`);
     await wethContract.connect(wethWhale).transfer(MAKER_ADDRESS, MAKER_WETH_AMOUNT);
@@ -119,18 +136,66 @@ async function fundWallets(): Promise<void> {
     await usdcContract.connect(usdcWhale).transfer(TAKER_ADDRESS, TAKER_USDC_AMOUNT);
     
     // Verify balances
+    const makerEthBalance = await ethers.provider.getBalance(MAKER_ADDRESS);
+    const takerEthBalance = await ethers.provider.getBalance(TAKER_ADDRESS);
     const makerWethBalance = await wethContract.balanceOf(MAKER_ADDRESS);
     const takerUsdcBalance = await usdcContract.balanceOf(TAKER_ADDRESS);
     
+    console.log(`✅ Maker ETH balance: ${ethers.formatEther(makerEthBalance)} ETH`);
     console.log(`✅ Maker WETH balance: ${ethers.formatEther(makerWethBalance)} WETH`);
+    console.log(`✅ Taker ETH balance: ${ethers.formatEther(takerEthBalance)} ETH`);
     console.log(`✅ Taker USDC balance: ${Number(takerUsdcBalance) / 1e6} USDC`);
     
     // Approve router to spend tokens (for convenience)
-    console.log("🔄 Pre-approving router for token spending...");
+    console.log("\n🔄 Pre-approving router for token spending...");
     
-    // Note: We can't sign transactions for these addresses without their private keys
-    // Users will need to approve the router themselves in their wallets
-    console.log("⚠️  Users will need to approve the 1inch router in their wallets before trading");
+    // Get router address from network config
+    const { name: networkName, config: networkConfig } = await getCurrentNetwork();
+    const routerAddress = networkConfig.routerAddress;
+    console.log(`   Router address: ${routerAddress}`);
+    
+    // Impersonate maker and taker accounts for approvals
+    await ethers.provider.send("hardhat_impersonateAccount", [MAKER_ADDRESS]);
+    await ethers.provider.send("hardhat_impersonateAccount", [TAKER_ADDRESS]);
+    
+    const makerSigner = await ethers.getSigner(MAKER_ADDRESS);
+    const takerSigner = await ethers.getSigner(TAKER_ADDRESS);
+    
+    try {
+      // Check current approvals
+      const makerWethApproval = await wethContract.allowance(MAKER_ADDRESS, routerAddress);
+      const takerUsdcApproval = await usdcContract.allowance(TAKER_ADDRESS, routerAddress);
+      
+      console.log(`   Current Maker WETH approval: ${ethers.formatEther(makerWethApproval)} WETH`);
+      console.log(`   Current Taker USDC approval: ${Number(takerUsdcApproval) / 1e6} USDC`);
+      
+      // Approve unlimited WETH for maker
+      if (makerWethApproval === 0n) {
+        console.log(`   Approving unlimited WETH for maker...`);
+        const maxUint256 = ethers.MaxUint256;
+        await wethContract.connect(makerSigner).approve(routerAddress, maxUint256);
+        console.log(`   ✅ Maker WETH approval set to unlimited`);
+      } else {
+        console.log(`   ✅ Maker WETH already approved`);
+      }
+
+      // Approve unlimited USDC for taker
+      if (takerUsdcApproval === 0n) {
+        console.log(`   Approving unlimited USDC for taker...`);
+        const maxUint256 = ethers.MaxUint256;
+        await usdcContract.connect(takerSigner).approve(routerAddress, maxUint256);
+        console.log(`   ✅ Taker USDC approval set to unlimited`);
+      } else {
+        console.log(`   ✅ Taker USDC already approved`);
+      }
+      
+      console.log(`🎉 Router approvals completed! Ready for trading.`);
+      
+    } finally {
+      // Stop impersonating maker and taker accounts
+      await ethers.provider.send("hardhat_stopImpersonatingAccount", [MAKER_ADDRESS]);
+      await ethers.provider.send("hardhat_stopImpersonatingAccount", [TAKER_ADDRESS]);
+    }
     
   } finally {
     // Stop impersonating accounts

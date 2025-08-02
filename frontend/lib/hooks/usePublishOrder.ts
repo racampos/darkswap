@@ -150,7 +150,7 @@ export function usePublishOrder() {
       // Create a simplified published order object
       const publishedOrder: PublishedOrder = {
         id: publishResult.orderId || publishResult.id || 'unknown',
-        chainId: chainId || 31337,
+        chainId: chainId || 1,
         order: createOrderRequest.order,
         signature: params.signature,
         extension: params.order.order.extension,

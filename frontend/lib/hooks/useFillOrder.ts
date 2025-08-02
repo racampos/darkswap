@@ -74,16 +74,16 @@ export function useFillOrder(): UseFillOrderResult {
     if (authorization.isAuthorizing) return FillOrderState.AUTHORIZING
     if (authorization.isAuthorized && authorization.isAuthorizationValid()) return FillOrderState.READY_TO_EXECUTE
     if (transaction.isLoading) return FillOrderState.EXECUTING
-    if (transaction.state === 'success') return FillOrderState.SUCCESS
-    if (authorization.error || transaction.error) return FillOrderState.FAILED
+    if (transaction.transactionState.step === 'confirmed') return FillOrderState.SUCCESS
+    if (authorization.error || transaction.transactionState.error) return FillOrderState.FAILED
     return FillOrderState.IDLE
   }, [
     authorization.isAuthorizing,
     authorization.isAuthorized,
     authorization.error,
     transaction.isLoading,
-    transaction.state,
-    transaction.error,
+    transaction.transactionState.step,
+    transaction.transactionState.error,
     authorization.isAuthorizationValid
   ])
 
@@ -149,8 +149,8 @@ export function useFillOrder(): UseFillOrderResult {
     }
 
     setError(null)
-    await transaction.executeTransaction(authorization.authorization)
-  }, [authorization.isAuthorized, authorization.authorization, authorization.isAuthorizationValid])
+    await transaction.executeTransaction(authorization.authorization, fillAmount)
+  }, [authorization.isAuthorized, authorization.authorization, authorization.isAuthorizationValid, fillAmount])
 
   const resetFlow = useCallback(() => {
     setError(null)
@@ -166,7 +166,7 @@ export function useFillOrder(): UseFillOrderResult {
     executionSummary,
     canFill: fillEligibility.canFill,
     fillReason: fillEligibility.reason || null,
-    error: error || authorization.error || transaction.error
+    error: error || authorization.error || transaction.transactionState.error
   }
 
   return {

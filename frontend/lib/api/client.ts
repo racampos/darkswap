@@ -123,7 +123,7 @@ export class DarkSwapAPIClient {
     const orders = response.data?.orders || []
     return orders.map(order => ({
       id: order.id,
-      chainId: 31337, // Default for localhost
+      chainId: 1, // Default for localhost
       order: order.orderData, // Map orderData to order
       signature: order.signature,
       extension: order.orderData?.extension || '',
@@ -164,7 +164,7 @@ export class DarkSwapAPIClient {
     // Transform to expected format
     return {
       id: order.id,
-      chainId: 31337, // Default for localhost
+      chainId: 1, // Default for localhost
       order: order.orderData, // Map orderData to order
       signature: order.signature,
       extension: order.orderData?.extension || '',
@@ -212,7 +212,7 @@ export class DarkSwapAPIClient {
     const orders = response.data?.orders || []
     return orders.map(order => ({
       id: order.id,
-      chainId: 31337, // Default for localhost
+      chainId: 1, // Default for localhost
       order: order.orderData, // Map orderData to order
       signature: order.signature,
       extension: order.orderData?.extension || '',

@@ -3,18 +3,18 @@ import { type Address } from 'viem'
 // Contract addresses for different networks
 export const CONTRACT_ADDRESSES = {
   localhost: {
-    chainId: 31337,
+    chainId: 1,
     contracts: {
-      Groth16Verifier: "0xFEE2d383Ee292283eC43bdf0fa360296BE1e1149",
-      HiddenParamPredicateZK: "0xf0014CBe67b3aB638bdaA2e2Cb1B531935829E50",
+      Groth16Verifier: "0xE3e7A4B35574Ce4b9Bc661cD93e8804Da548932a",
+      HiddenParamPredicateZK: "0xE1165C689C0c3e9642cA7606F5287e708d846206",
       AggregationRouterV6: "0x111111125421cA6dc452d289314280a0f8842A65"
     }
   },
   hardhat: {
-    chainId: 31337,
+    chainId: 1,
     contracts: {
-      Groth16Verifier: "",
-      HiddenParamPredicateZK: "",
+      Groth16Verifier: "0xE3e7A4B35574Ce4b9Bc661cD93e8804Da548932a",
+      HiddenParamPredicateZK: "0xE1165C689C0c3e9642cA7606F5287e708d846206",
       AggregationRouterV6: "0x111111125421cA6dc452d289314280a0f8842A65"
     }
   }
@@ -28,11 +28,7 @@ export const TOKEN_ADDRESSES = {
 
 // Token addresses by chain ID (for useNetwork hook)
 export const TOKEN_ADDRESSES_BY_CHAIN: Record<number, Record<string, string>> = {
-  31337: { // Updated to use the new chain ID
-    WETH: TOKEN_ADDRESSES.WETH,
-    USDC: TOKEN_ADDRESSES.USDC,
-  },
-  1: { // Keep mainnet for reference
+  1: { // Updated to use the new chain ID
     WETH: TOKEN_ADDRESSES.WETH,
     USDC: TOKEN_ADDRESSES.USDC,
   }
@@ -51,7 +47,7 @@ export function getRouterAddress(network: string): string {
 
 // Get token addresses for a specific chain ID
 export function getTokenAddresses(chainId: number): Record<string, string> {
-  return TOKEN_ADDRESSES_BY_CHAIN[chainId] || TOKEN_ADDRESSES_BY_CHAIN[31337]
+  return TOKEN_ADDRESSES_BY_CHAIN[chainId] || TOKEN_ADDRESSES_BY_CHAIN[1]
 }
 
 // Check if contracts are deployed for a network

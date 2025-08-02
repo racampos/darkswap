@@ -1,201 +1,279 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import { useAccount } from 'wagmi'
-import { type Hash } from 'viem'
-import { 
-  TransactionState, 
-  createTransactionSteps, 
-  updateTransactionStep,
-  type TransactionStep
-} from '@/lib/utils/transactionTracking'
-import { type AuthorizeFillResponse } from '@/lib/api/types'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useAccount, useContractWrite, useWaitForTransaction } from 'wagmi'
+import { buildTakerTraits } from '../utils/takerTraits'
+import { type Hash, hexToSignature } from 'viem'
+import { ethers } from 'ethers'
+import AggregationRouterV6ABI from '../abi/AggregationRouterV6.json'
+import { getRouterAddress } from '../constants/contracts'
+import type { AuthorizeFillResponse } from '../api/types'
 
-interface TransactionHookState {
-  state: TransactionState
-  steps: TransactionStep[]
-  txHash: Hash | null
-  error: string | null
+export type TransactionStep = 
+  | 'preparing'
+  | 'waiting_approval'
+  | 'confirming'
+  | 'confirmed'
+  | 'failed'
+
+interface TransactionState {
+  step: TransactionStep
+  hash?: string
+  error?: string
   isLoading: boolean
 }
 
-interface UseTransactionResult extends TransactionHookState {
-  executeTransaction: (authorization: AuthorizeFillResponse) => Promise<void>
-  resetTransaction: () => void
-  getCurrentStep: () => TransactionStep | null
-  getProgress: () => number
+function extractExtension(order: any): string {
+  return order.extension || '0x'
 }
 
-/**
- * Hook for managing blockchain transactions with step-by-step progress tracking
- */
-export function useTransaction(): UseTransactionResult {
+export function useTransaction() {
   const { address } = useAccount()
-  const [state, setState] = useState<TransactionHookState>({
-    state: TransactionState.IDLE,
-    steps: createTransactionSteps(),
-    txHash: null,
-    error: null,
+  const [transactionState, setTransactionState] = useState<TransactionState>({
+    step: 'preparing',
     isLoading: false
   })
 
-  // Use wagmi hooks for contract writing
-  // const { writeContractAsync, isPending: isWritePending } = useWriteContract()
+  // Contract write configuration
+  const { 
+    data: writeData,
+    write: executeContractWrite,
+    error: writeError,
+    isLoading: isWriteLoading
+  } = useContractWrite({
+    address: getRouterAddress('localhost') as `0x${string}`,
+    abi: AggregationRouterV6ABI,
+    functionName: 'fillOrderArgs',
+  })
 
   // Wait for transaction confirmation
-  // const { 
-  //   data: receipt, 
-  //   isLoading: isWaitingForReceipt, 
-  //   error: receiptError 
-  // } = useWaitForTransactionReceipt({
-  //   hash: state.txHash || undefined,
-  // })
+  const { 
+    data: receipt,
+    error: receiptError,
+    isLoading: isReceiptLoading
+  } = useWaitForTransaction({
+    hash: writeData?.hash,
+  })
 
-  const updateStep = useCallback((stepId: string, updates: Partial<TransactionStep>) => {
-    setState(prev => ({
+  const updateStep = useCallback((step: TransactionStep, additionalData?: Partial<TransactionState>) => {
+    setTransactionState(prev => ({
       ...prev,
-      steps: updateTransactionStep(prev.steps, stepId, updates)
+      step,
+      isLoading: step === 'waiting_approval' || step === 'confirming',
+      ...additionalData
     }))
   }, [])
 
-  const executeTransaction = useCallback(async (authorization: AuthorizeFillResponse) => {
+  const executeTransaction = useCallback(async (authorization: AuthorizeFillResponse, fillAmount: string) => {
     if (!address) {
-      setState(prev => ({
-        ...prev,
-        error: 'Wallet not connected',
-        state: TransactionState.FAILED
-      }))
+      updateStep('failed', { error: 'Wallet not connected' })
       return
     }
 
-    if (!authorization.success || !authorization.orderWithExtension) {
-      setState(prev => ({
-        ...prev,
-        error: 'Invalid authorization',
-        state: TransactionState.FAILED
-      }))
-      return
+    console.log('🔄 Preparing REAL blockchain transaction:', {
+      orderData: authorization.orderWithExtension,
+      signature: authorization.signature,
+      fillAmount: fillAmount
+    })
+
+    console.log('🔍 FULL AUTHORIZATION RESPONSE:', {
+      success: authorization.success,
+      hasOrderData: !!authorization.orderWithExtension,
+      hasSignature: !!authorization.signature,
+      signatureLength: authorization.signature?.length,
+      orderKeys: authorization.orderWithExtension ? Object.keys(authorization.orderWithExtension) : [],
+      rawOrderWithExtension: JSON.stringify(authorization.orderWithExtension, (key, value) =>
+        typeof value === 'bigint' ? value.toString() : value, 2)
+    })
+
+    // Parse signature using ethers.js (like the working demo script)
+    const ethersSignature = ethers.Signature.from(authorization.signature)
+    const r = ethersSignature.r
+    const vs = ethersSignature.yParityAndS
+
+    console.log('🔍 SIGNATURE DEBUG (using ethers.js like demo):', {
+      originalSig: authorization.signature,
+      parsedR: r,
+      parsedVs: vs,
+      originalLength: authorization.signature.length
+    })
+
+    // Extract extension and build taker traits
+    const extension = extractExtension(authorization.orderWithExtension)
+    const takerTraitsData = buildTakerTraits({
+      makingAmount: false, // Following PredicateExtensions.test.ts pattern
+      extension: extension,
+      target: address,
+      interaction: '0x'
+    })
+
+    console.log('🔍 ORIGINAL ORDER FROM BACKEND:', {
+      salt: authorization.orderWithExtension.salt,
+      maker: authorization.orderWithExtension.maker,
+      receiver: authorization.orderWithExtension.receiver,
+      makerAsset: authorization.orderWithExtension.makerAsset,
+      takerAsset: authorization.orderWithExtension.takerAsset,
+      makingAmount: authorization.orderWithExtension.makingAmount,
+      takingAmount: authorization.orderWithExtension.takingAmount,
+      makerTraits: authorization.orderWithExtension.makerTraits,
+      hasExtension: !!(authorization.orderWithExtension as any).extension,
+      extensionLength: (authorization.orderWithExtension as any).extension?.length || 0
+    })
+
+    // Convert numerical fields to BigInt for the 1inch contract (but keep extension field!)
+    const orderForContract = {
+      salt: BigInt(authorization.orderWithExtension.salt),
+      maker: authorization.orderWithExtension.maker,
+      receiver: authorization.orderWithExtension.receiver,
+      makerAsset: authorization.orderWithExtension.makerAsset,
+      takerAsset: authorization.orderWithExtension.takerAsset,
+      makingAmount: BigInt(authorization.orderWithExtension.makingAmount),
+      takingAmount: BigInt(authorization.orderWithExtension.takingAmount),
+      makerTraits: BigInt(authorization.orderWithExtension.makerTraits),
+      // CRITICAL: Include extension field like the working demo script!
+      extension: (authorization.orderWithExtension as any).extension || '0x'
     }
+
+    console.log('🔍 ORDER FOR CONTRACT (including extension):', {
+      salt: orderForContract.salt.toString(),
+      maker: orderForContract.maker,
+      receiver: orderForContract.receiver,
+      makerAsset: orderForContract.makerAsset,
+      takerAsset: orderForContract.takerAsset,
+      makingAmount: orderForContract.makingAmount.toString(),
+      takingAmount: orderForContract.takingAmount.toString(),
+      makerTraits: orderForContract.makerTraits.toString(),
+      extension: orderForContract.extension,
+      extensionLength: orderForContract.extension.length
+    })
+
+    console.log('📝 Real transaction parameters:', {
+      orderMaker: orderForContract.maker,
+      fillAmount: fillAmount,
+      extensionLength: extension.length,
+      takerTraits: takerTraitsData.traits,
+      r: r.slice(0, 10) + '...',
+      vs: vs.slice(0, 10) + '...'
+    })
+
+    console.log('🔍 DEBUG - Order types:', {
+      salt: typeof orderForContract.salt,
+      maker: typeof orderForContract.maker,
+      makingAmount: typeof orderForContract.makingAmount,
+      takingAmount: typeof orderForContract.takingAmount,
+      makerTraits: typeof orderForContract.makerTraits,
+      extension: typeof orderForContract.extension
+    })
+
+    console.log('🚀 Calling 1inch AggregationRouterV6.fillOrderArgs...')
+
+    // ===== CRITICAL DEBUGGING: LOG EXACT fillOrderArgs PARAMETERS =====
+    console.log('🔍 FRONTEND - fillOrderArgs PARAMETERS:')
+    console.log(`   OrderWithExtension: ${JSON.stringify(orderForContract, (key, value) =>
+      typeof value === 'bigint' ? value.toString() : value, 2)}`)
+    console.log(`   Signature R: ${r}`)
+    console.log(`   Signature VS: ${vs}`)
+    console.log(`   Fill Amount: ${fillAmount} (wei)`)
+    console.log(`   Taker Traits: ${takerTraitsData.traits || '0x0'}`)
+    console.log(`   Taker Args: ${takerTraitsData.args}`)
+    console.log(`   Extension: ${extension.slice(0, 100)}${extension.length > 100 ? '...' : ''} (${extension.length} chars)`)
+
+    console.log('🔍 DEBUG - Transaction args:', {
+      orderWithExtension: JSON.stringify(orderForContract, (key, value) =>
+        typeof value === 'bigint' ? value.toString() : value, 2),
+      r,
+      vs,
+      fillAmount: fillAmount,
+      fillAmountType: typeof BigInt(fillAmount),
+      takerTraits: takerTraitsData.traits || '0x0',
+      takerTraitsType: typeof BigInt(takerTraitsData.traits || '0x0'),
+      args: takerTraitsData.args
+    })
+
+    console.log('📝 About to call executeContractWrite...')
 
     try {
-      setState(prev => ({
-        ...prev,
-        state: TransactionState.EXECUTING,
-        isLoading: true,
-        error: null
-      }))
-
-      // Step 1: Authorization (already complete)
-      updateStep('authorize', { state: 'success' })
-
-      // Step 2: Token approval (simplified - assume approved for demo)
-      updateStep('approve', { state: 'loading' })
-      await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate approval
-      updateStep('approve', { state: 'success' })
-
-      // Step 3: Execute order
-      updateStep('execute', { state: 'loading' })
-
-      console.log('🔄 Executing order with authorization:', {
-        orderData: authorization.orderWithExtension,
-        signature: authorization.signature
+      const txResult = await executeContractWrite({
+        args: [
+          orderForContract,     // Order struct WITH extension (like demo script)
+          r,                    // signature r
+          vs,                   // signature vs (using ethers.js yParityAndS)
+          BigInt(fillAmount),   // fill amount
+          BigInt(takerTraitsData.traits || '0x0'), // taker traits
+          takerTraitsData.args  // extension args
+        ]
       })
 
-      // For demo purposes, we'll simulate the transaction
-      // In a real implementation, this would call the 1inch router contract
-      const mockTxHash = `0x${Array.from({ length: 64 }, () => 
-        Math.floor(Math.random() * 16).toString(16)
-      ).join('')}` as Hash
-
-      // Simulate transaction submission
-      await new Promise(resolve => setTimeout(resolve, 2000))
-
-      setState(prev => ({
-        ...prev,
-        txHash: mockTxHash,
-        state: TransactionState.CONFIRMING
-      }))
-
-      updateStep('execute', { 
-        state: 'success', 
-        txHash: mockTxHash 
-      })
-
-      // Step 4: Wait for confirmation
-      updateStep('confirm', { state: 'loading' })
-
-      // Simulate confirmation wait
-      await new Promise(resolve => setTimeout(resolve, 3000))
-
-      updateStep('confirm', { state: 'success' })
-
-      setState(prev => ({
-        ...prev,
-        state: TransactionState.SUCCESS,
-        isLoading: false
-      }))
-
-      console.log('✅ Transaction completed successfully:', mockTxHash)
-
+      updateStep('waiting_approval')
+      console.log('✅ Transaction submitted successfully:', txResult)
     } catch (error: any) {
       console.error('❌ Transaction failed:', error)
-      
-      const currentStepId = state.steps.find(step => step.state === 'loading')?.id
-      if (currentStepId) {
-        updateStep(currentStepId, { 
-          state: 'error', 
-          error: error.message 
-        })
-      }
-
-      setState(prev => ({
-        ...prev,
-        state: TransactionState.FAILED,
-        isLoading: false,
-        error: error.message || 'Transaction failed'
-      }))
+      updateStep('failed', { 
+        error: error?.message || 'Transaction failed' 
+      })
     }
-  }, [address, updateStep, state.steps])
+  }, [address, executeContractWrite, updateStep])
+
+  // Handle transaction receipt
+  useEffect(() => {
+    if (receipt) {
+      updateStep('confirmed', { 
+        hash: receipt.transactionHash 
+      })
+      console.log('✅ Transaction confirmed:', receipt)
+    }
+  }, [receipt, updateStep])
+
+  // Handle receipt error
+  useEffect(() => {
+    if (receiptError) {
+      updateStep('failed', { 
+        error: receiptError.message 
+      })
+      console.error('❌ Transaction receipt error:', receiptError)
+    }
+  }, [receiptError, updateStep])
+
+  // Handle write error
+  useEffect(() => {
+    if (writeError) {
+      updateStep('failed', { 
+        error: writeError.message 
+      })
+      console.error('❌ Transaction write error:', writeError)
+    }
+  }, [writeError, updateStep])
 
   const resetTransaction = useCallback(() => {
-    setState({
-      state: TransactionState.IDLE,
-      steps: createTransactionSteps(),
-      txHash: null,
-      error: null,
+    setTransactionState({
+      step: 'preparing',
       isLoading: false
     })
   }, [])
 
-  const getCurrentStep = useCallback((): TransactionStep | null => {
-    const loadingStep = state.steps.find(step => step.state === 'loading')
-    if (loadingStep) return loadingStep
-    
-    // Find the last successful step
-    let lastSuccessIndex = -1
-    for (let i = state.steps.length - 1; i >= 0; i--) {
-      if (state.steps[i].state === 'success') {
-        lastSuccessIndex = i
-        break
-      }
+  const getCurrentStep = useCallback(() => transactionState.step, [transactionState.step])
+  
+  const getProgress = useCallback(() => {
+    switch (transactionState.step) {
+      case 'preparing': return 0
+      case 'waiting_approval': return 25
+      case 'confirming': return 50
+      case 'confirmed': return 100
+      case 'failed': return 0
+      default: return 0
     }
-    
-    if (lastSuccessIndex === -1) return state.steps[0]
-    
-    const nextIndex = lastSuccessIndex + 1
-    return nextIndex < state.steps.length ? state.steps[nextIndex] : null
-  }, [state.steps])
+  }, [transactionState.step])
 
-  const getProgress = useCallback((): number => {
-    const completedSteps = state.steps.filter(step => step.state === 'success').length
-    return Math.round((completedSteps / state.steps.length) * 100)
-  }, [state.steps])
+  const isLoading = useMemo(() => 
+    isWriteLoading || isReceiptLoading || transactionState.isLoading
+  , [isWriteLoading, isReceiptLoading, transactionState.isLoading])
 
   return {
-    ...state,
     executeTransaction,
     resetTransaction,
     getCurrentStep,
-    getProgress
+    getProgress,
+    transactionState,
+    isLoading
   }
 } 

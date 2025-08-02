@@ -26,11 +26,22 @@ export function FillAmountInput({
   const [isFocused, setIsFocused] = useState(false)
 
   useEffect(() => {
-    setInputValue(value)
-  }, [value])
+    // Convert wei value back to human-readable format for display
+    if (value && value !== '0') {
+      try {
+        const weiValue = BigInt(value)
+        const humanValue = Number(weiValue) / Math.pow(10, order.metadata.takerToken.decimals)
+        setInputValue(humanValue.toString())
+      } catch {
+        setInputValue(value)
+      }
+    } else {
+      setInputValue('')
+    }
+  }, [value, order.metadata.takerToken.decimals])
 
-  const validation = validateFillAmount(order, inputValue)
-  const output = calculateOutputAmount(order, inputValue)
+  const validation = validateFillAmount(order, value)
+  const output = calculateOutputAmount(order, value)
   const maxAmount = BigInt(order.order.takingAmount)
   const maxAmountFormatted = (Number(maxAmount) / Math.pow(10, order.metadata.takerToken.decimals)).toFixed(4)
 

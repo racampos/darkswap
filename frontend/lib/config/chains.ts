@@ -1,7 +1,7 @@
 import { Chain } from 'viem'
 
 export const localhost = {
-  id: 31337, // Custom chain ID for local development (Hardhat default)
+  id: 1, // Match mainnet chainId for 1inch contract compatibility
   name: 'DarkSwap Local (Forked Mainnet)',
   network: 'localhost',
   nativeCurrency: {

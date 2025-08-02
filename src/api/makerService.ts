@@ -83,7 +83,32 @@ export class MakerService {
   public async initialize(): Promise<void> {
     console.log(`Initializing maker service...`);
     
-    // Deploy ZK predicate contract to forked network
+    // Try to read predicate address from deployment config first
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      
+      const configPath = path.join(__dirname, "../../config/deployed-addresses.json");
+      if (fs.existsSync(configPath)) {
+        const configData = fs.readFileSync(configPath, "utf8");
+        const config = JSON.parse(configData);
+        
+        // Use localhost network deployment
+        const deployment = config.networks?.localhost || config.networks?.hardhat;
+        if (deployment?.contracts?.HiddenParamPredicateZK) {
+          this.zkPredicateAddress = deployment.contracts.HiddenParamPredicateZK;
+          console.log(`   Using deployed predicate from config: ${this.zkPredicateAddress}`);
+          console.log(`Maker service initialized with ZK predicate: ${this.zkPredicateAddress}`);
+          return;
+        }
+      }
+    } catch (configError) {
+      const errorMessage = configError instanceof Error ? configError.message : String(configError);
+      console.log(`   Could not read deployment config: ${errorMessage}`);
+    }
+    
+    // Fallback: Deploy ZK predicate contract to forked network
+    console.log(`   Deployment config not found, deploying new contracts...`);
     this.zkPredicateAddress = await this.deployZKPredicate();
     
     console.log(`Maker service initialized with ZK predicate: ${this.zkPredicateAddress}`);
@@ -241,21 +266,102 @@ export class MakerService {
         postInteraction: '0x',
       });
 
-      console.log(`   Order rebuilt with extension`);
+      console.log(`   Order rebuilt with extension (this is a test)`);
       console.log(`   Extension length: ${(orderWithExtension as any).extension?.length || 0} chars`);
 
-      // Sign the new order
+      // Sign the new order - use private key from environment
       const { signCommitmentOrder } = await import('../utils/commitmentOrders');
       
-      const [, maker] = await ethers.getSigners(); // Use signers[1] to match demoFullExecution.ts
+      let makerSigner;
+      console.log("Created makerSigner variable")
+      
+      console.log("Before try-catch");
+      try {
+        console.log(`   🔑 Using MAKER_PRIVATE_KEY from environment`);
+        
+        // Get private key from environment
+        const makerPrivateKey = process.env.MAKER_PRIVATE_KEY;
+        if (!makerPrivateKey) {
+          throw new Error('MAKER_PRIVATE_KEY not found in environment variables');
+        }
+        
+        // Create signer directly from private key
+        const privateSigner = new ethers.Wallet(makerPrivateKey, ethers.provider);
+        
+        console.log(`   ✅ Created wallet signer: ${privateSigner.address}`);
+        console.log(`   🔍 Expected maker address: ${orderParams.maker}`);
+        console.log(`   🔍 Addresses match: ${privateSigner.address.toLowerCase() === orderParams.maker.toLowerCase()}`);
+        
+        // Check if the private key signer matches the expected maker
+        if (privateSigner.address.toLowerCase() === orderParams.maker.toLowerCase()) {
+          makerSigner = privateSigner;
+          console.log(`   ✅ Using MAKER_PRIVATE_KEY signer (addresses match)`);
+        } else {
+          console.log(`   ⚠️  Address mismatch, falling back to Hardhat signer`);
+          throw new Error('Address mismatch');
+        }
+        
+      } catch (privateKeyError) {
+        const errorMessage = privateKeyError instanceof Error ? privateKeyError.message : String(privateKeyError);
+        console.log(`   ❌ Private key signing failed or address mismatch: ${errorMessage}`);
+        console.log(`   🔄 Falling back to default signer...`);
+        
+        // Fallback to original method if private key fails or address doesn't match
+        const [, defaultMaker] = await ethers.getSigners();
+        makerSigner = defaultMaker;
+        
+        console.log(`   ⚠️  Using fallback signer: ${makerSigner.address}`);
+        console.log(`   🔍 Final address match: ${makerSigner.address.toLowerCase() === orderParams.maker.toLowerCase()}`);
+      }
+      console.log("After try-catch");
+      
+      console.log(`🔍 ABOUT TO SIGN ORDER:`);
+      console.log(`   Order structure: {
+  "salt": "${orderWithExtension.salt}",
+  "maker": "${orderWithExtension.maker}",
+  "receiver": "${orderWithExtension.receiver}",
+  "makerAsset": "${orderWithExtension.makerAsset}",
+  "takerAsset": "${orderWithExtension.takerAsset}",
+  "makingAmount": "${orderWithExtension.makingAmount}",
+  "takingAmount": "${orderWithExtension.takingAmount}",
+  "makerTraits": "${orderWithExtension.makerTraits}",
+  "hasExtension": ${!!(orderWithExtension as any).extension}
+}`);
+
+      // ===== CRITICAL DEBUGGING: LOG EXACT SIGNING PARAMETERS =====
+      console.log(`🔍 SIGNING PARAMETERS FOR COMPARISON WITH DEMO:`);
+      console.log(`   Router Address: ${this.routerAddress}`);
+      console.log(`   Chain ID: ${this.chainId} (type: ${typeof this.chainId})`);
+      console.log(`   Chain ID as BigInt: ${BigInt(this.chainId)}`);
+      console.log(`   Signer Address: ${makerSigner.address}`);
+      console.log(`   Expected Maker: ${orderWithExtension.maker}`);
+      console.log(`   Addresses Match: ${makerSigner.address.toLowerCase() === orderWithExtension.maker.toLowerCase()}`);
+      
+      // Log the EIP-712 domain that will be used by the backend signing
+      const { buildOrderData } = await import("../../test/helpers/orderUtils");
+      const orderData = buildOrderData(this.chainId, this.routerAddress, orderWithExtension);
+      console.log(`🔍 EIP-712 DOMAIN BEING USED:`);
+      console.log(`   Name: "${orderData.domain.name}"`);
+      console.log(`   Version: "${orderData.domain.version}"`);
+      console.log(`   ChainId: ${orderData.domain.chainId} (type: ${typeof orderData.domain.chainId})`);
+      console.log(`   VerifyingContract: ${orderData.domain.verifyingContract}`);
+      
+      // Log exact order value for signing
+      console.log(`🔍 ORDER VALUE FOR EIP-712 SIGNING:`);
+      console.log(JSON.stringify(orderData.value, (key, value) => 
+        typeof value === 'bigint' ? value.toString() : value, 2));
+      
+      console.log(`🔍 CALLING signCommitmentOrder...`);
+      
       const signature = await signCommitmentOrder(
         orderWithExtension,
         this.chainId,
         this.routerAddress,
-        maker
+        makerSigner
       );
 
       console.log(`   Order signed`);
+      console.log(`   Signature: ${signature}`);
 
       return {
         success: true,

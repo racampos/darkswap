@@ -50,6 +50,29 @@ async function demonstrateFullExecution() {
   console.log(`   Commitment: ${commitmentOrder.commitment}`);
 
   // Sign the original commitment order
+  console.log(`🔍 DEMO SCRIPT - SIGNING PARAMETERS FOR COMPARISON:`);
+  console.log(`   Router Address: ${AGGREGATION_ROUTER_V6}`);
+  console.log(`   Chain ID: ${BigInt(1)} (type: ${typeof BigInt(1)})`);
+  console.log(`   Signer Address: ${maker.address}`);
+  console.log(`   Order Maker: ${commitmentOrder.order.maker}`);
+  console.log(`   Addresses Match: ${maker.address.toLowerCase() === commitmentOrder.order.maker.toLowerCase()}`);
+  
+  // Log the EIP-712 domain that will be used
+  const { buildOrderData } = await import("../test/helpers/orderUtils");
+  const demoOrderData = buildOrderData(BigInt(1), AGGREGATION_ROUTER_V6, commitmentOrder.order);
+  console.log(`🔍 DEMO SCRIPT - EIP-712 DOMAIN BEING USED:`);
+  console.log(`   Name: "${demoOrderData.domain.name}"`);
+  console.log(`   Version: "${demoOrderData.domain.version}"`);
+  console.log(`   ChainId: ${demoOrderData.domain.chainId} (type: ${typeof demoOrderData.domain.chainId})`);
+  console.log(`   VerifyingContract: ${demoOrderData.domain.verifyingContract}`);
+  
+  // Log exact order value for signing
+  console.log(`🔍 DEMO SCRIPT - ORDER VALUE FOR EIP-712 SIGNING:`);
+  console.log(JSON.stringify(demoOrderData.value, (key, value) => 
+    typeof value === 'bigint' ? value.toString() : value, 2));
+  
+  console.log(`🔍 DEMO SCRIPT - CALLING signCommitmentOrder...`);
+  
   const originalSignature = await signCommitmentOrder(
     commitmentOrder.order,
     BigInt(1),
@@ -57,6 +80,7 @@ async function demonstrateFullExecution() {
     maker
   );
   console.log(`   Order signed`);
+  console.log(`   Signature: ${originalSignature}`);
 
   // Initialize maker service
   const makerService = new MakerService(AGGREGATION_ROUTER_V6, BigInt(1), false); // No Express needed for demo
@@ -67,7 +91,6 @@ async function demonstrateFullExecution() {
   await setupTestBalances(maker, taker);
   
   // Calculate the real order hash using EIP-712 (needed for registration)
-  const { buildOrderData } = await import("../test/helpers/orderUtils");
   const network = await ethers.provider.getNetwork();
   const chainId = network.chainId;
   const orderData = buildOrderData(chainId, AGGREGATION_ROUTER_V6, commitmentOrder.order);
