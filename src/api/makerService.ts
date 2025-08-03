@@ -173,6 +173,7 @@ export class MakerService {
     commitment: bigint
   ): Promise<{ success: boolean; proof?: any; error?: string }> {
     try {
+      console.log(`     🔧 Preparing proof inputs...`);
       const proofInputs = {
         secretPrice: secrets.secretPrice.toString(),
         secretAmount: secrets.secretAmount.toString(),
@@ -182,18 +183,25 @@ export class MakerService {
         offeredAmount: fillAmount.toString()
       };
 
+      console.log(`     📁 Setting up proof config with paths...`);
       const proofConfig = {
         wasmPath: './circuits/hidden_params_js/hidden_params.wasm',
-        zkeyPath: './circuits/hidden_params_0001.zkey'
+        zkeyPath: './circuits/hidden_params_0001.zkey',
+        enableLogging: true
       };
 
+      console.log(`     ⚡ Calling generateFormattedProof...`);
+      const proofGenStartTime = Date.now();
       const result = await generateFormattedProof(proofInputs, proofConfig);
+      const proofGenEndTime = Date.now();
+      console.log(`     ✅ generateFormattedProof completed in ${proofGenEndTime - proofGenStartTime}ms`);
       
       return {
         success: true,
         proof: result
       };
     } catch (error) {
+      console.log(`     ❌ Proof generation error:`, error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown proof generation error'
@@ -266,16 +274,14 @@ export class MakerService {
         postInteraction: '0x',
       });
 
-      console.log(`   Order rebuilt with extension (this is a test)`);
+      console.log(`   Order rebuilt with extension`);
       console.log(`   Extension length: ${(orderWithExtension as any).extension?.length || 0} chars`);
 
       // Sign the new order - use private key from environment
       const { signCommitmentOrder } = await import('../utils/commitmentOrders');
       
       let makerSigner;
-      console.log("Created makerSigner variable")
       
-      console.log("Before try-catch");
       try {
         console.log(`   🔑 Using MAKER_PRIVATE_KEY from environment`);
         
@@ -313,43 +319,42 @@ export class MakerService {
         console.log(`   ⚠️  Using fallback signer: ${makerSigner.address}`);
         console.log(`   🔍 Final address match: ${makerSigner.address.toLowerCase() === orderParams.maker.toLowerCase()}`);
       }
-      console.log("After try-catch");
       
-      console.log(`🔍 ABOUT TO SIGN ORDER:`);
-      console.log(`   Order structure: {
-  "salt": "${orderWithExtension.salt}",
-  "maker": "${orderWithExtension.maker}",
-  "receiver": "${orderWithExtension.receiver}",
-  "makerAsset": "${orderWithExtension.makerAsset}",
-  "takerAsset": "${orderWithExtension.takerAsset}",
-  "makingAmount": "${orderWithExtension.makingAmount}",
-  "takingAmount": "${orderWithExtension.takingAmount}",
-  "makerTraits": "${orderWithExtension.makerTraits}",
-  "hasExtension": ${!!(orderWithExtension as any).extension}
-}`);
+//       console.log(`🔍 ABOUT TO SIGN ORDER:`);
+//       console.log(`   Order structure: {
+//   "salt": "${orderWithExtension.salt}",
+//   "maker": "${orderWithExtension.maker}",
+//   "receiver": "${orderWithExtension.receiver}",
+//   "makerAsset": "${orderWithExtension.makerAsset}",
+//   "takerAsset": "${orderWithExtension.takerAsset}",
+//   "makingAmount": "${orderWithExtension.makingAmount}",
+//   "takingAmount": "${orderWithExtension.takingAmount}",
+//   "makerTraits": "${orderWithExtension.makerTraits}",
+//   "hasExtension": ${!!(orderWithExtension as any).extension}
+// }`);
 
-      // ===== CRITICAL DEBUGGING: LOG EXACT SIGNING PARAMETERS =====
-      console.log(`🔍 SIGNING PARAMETERS FOR COMPARISON WITH DEMO:`);
-      console.log(`   Router Address: ${this.routerAddress}`);
-      console.log(`   Chain ID: ${this.chainId} (type: ${typeof this.chainId})`);
-      console.log(`   Chain ID as BigInt: ${BigInt(this.chainId)}`);
-      console.log(`   Signer Address: ${makerSigner.address}`);
-      console.log(`   Expected Maker: ${orderWithExtension.maker}`);
-      console.log(`   Addresses Match: ${makerSigner.address.toLowerCase() === orderWithExtension.maker.toLowerCase()}`);
+      // // ===== CRITICAL DEBUGGING: LOG EXACT SIGNING PARAMETERS =====
+      // console.log(`🔍 SIGNING PARAMETERS FOR COMPARISON WITH DEMO:`);
+      // console.log(`   Router Address: ${this.routerAddress}`);
+      // console.log(`   Chain ID: ${this.chainId} (type: ${typeof this.chainId})`);
+      // console.log(`   Chain ID as BigInt: ${BigInt(this.chainId)}`);
+      // console.log(`   Signer Address: ${makerSigner.address}`);
+      // console.log(`   Expected Maker: ${orderWithExtension.maker}`);
+      // console.log(`   Addresses Match: ${makerSigner.address.toLowerCase() === orderWithExtension.maker.toLowerCase()}`);
       
-      // Log the EIP-712 domain that will be used by the backend signing
-      const { buildOrderData } = await import("../../test/helpers/orderUtils");
-      const orderData = buildOrderData(this.chainId, this.routerAddress, orderWithExtension);
-      console.log(`🔍 EIP-712 DOMAIN BEING USED:`);
-      console.log(`   Name: "${orderData.domain.name}"`);
-      console.log(`   Version: "${orderData.domain.version}"`);
-      console.log(`   ChainId: ${orderData.domain.chainId} (type: ${typeof orderData.domain.chainId})`);
-      console.log(`   VerifyingContract: ${orderData.domain.verifyingContract}`);
+      // // Log the EIP-712 domain that will be used by the backend signing
+      // const { buildOrderData } = await import("../../test/helpers/orderUtils");
+      // const orderData = buildOrderData(this.chainId, this.routerAddress, orderWithExtension);
+      // console.log(`🔍 EIP-712 DOMAIN BEING USED:`);
+      // console.log(`   Name: "${orderData.domain.name}"`);
+      // console.log(`   Version: "${orderData.domain.version}"`);
+      // console.log(`   ChainId: ${orderData.domain.chainId} (type: ${typeof orderData.domain.chainId})`);
+      // console.log(`   VerifyingContract: ${orderData.domain.verifyingContract}`);
       
-      // Log exact order value for signing
-      console.log(`🔍 ORDER VALUE FOR EIP-712 SIGNING:`);
-      console.log(JSON.stringify(orderData.value, (key, value) => 
-        typeof value === 'bigint' ? value.toString() : value, 2));
+      // // Log exact order value for signing
+      // console.log(`🔍 ORDER VALUE FOR EIP-712 SIGNING:`);
+      // console.log(JSON.stringify(orderData.value, (key, value) => 
+      //   typeof value === 'bigint' ? value.toString() : value, 2));
       
       console.log(`🔍 CALLING signCommitmentOrder...`);
       
@@ -448,7 +453,9 @@ export class MakerService {
 
       // Generate ZK proof for this fill
       console.log(`   Generating ZK proof...`);
+      const proofStartTime = Date.now();
       const proofResult = await this.generateZKProof(secrets, BigInt(fillAmountNumber), BigInt(orderParams.commitment));
+      const proofEndTime = Date.now();
       
       if (!proofResult.success) {
         return {
@@ -457,7 +464,7 @@ export class MakerService {
         };
       }
 
-      console.log(`   ZK proof generated successfully`);
+      console.log(`   ZK proof generated successfully in ${proofEndTime - proofStartTime}ms`);
 
       // Build order with extension and sign
       console.log(`   Building order with ZK extension...`);
@@ -555,7 +562,9 @@ export class MakerService {
 
       // Generate ZK proof for this fill
       console.log(`   Generating ZK proof...`);
+      const proofStartTime = Date.now();
       const proofResult = await this.generateZKProof(secrets, request.fillAmount, BigInt(request.orderParams.commitment));
+      const proofEndTime = Date.now();
       
       if (!proofResult.success) {
         console.log(`   ZK proof generation failed: ${proofResult.error}`);
@@ -566,7 +575,7 @@ export class MakerService {
         });
       }
 
-      console.log(`   ZK proof generated successfully`);
+      console.log(`   ZK proof generated successfully in ${proofEndTime - proofStartTime}ms`);
 
       // Build order with extension and sign
       console.log(`   Building order with ZK extension...`);
