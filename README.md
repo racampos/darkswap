@@ -74,11 +74,11 @@ Get superior trading outcomes:
 # Install dependencies
 npm install
 
-# Run the full workflow demo
+# Run the full workflow demo (without real on-chain transactions)
 npm run demo:full-workflow
 
-# Test privacy-preserving orders
-npx hardhat test test/CommitmentOrders.test.ts
+# Test the full workflow (with real on-chain ZKP validation)
+npm run demo:full-execution
 ```
 
 ### Web Interface
